@@ -1,0 +1,23 @@
+{
+  "name": "subagent-control-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A local control protocol for Codex-led Claude Code subagents with structured results, process governance, and verification tooling.",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "subagent",
+    "mcp",
+    "orchestration",
+    "verification"
+  ],
+  "scripts": {
+    "agent:run": "node scripts/run-claude-agents.mjs",
+    "text:check": "node scripts/check-text-health.mjs",
+    "frontend:verify": "node scripts/verify-vite-app.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

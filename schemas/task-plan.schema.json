@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task-plan.schema.json",
+  "title": "Claude subagent task plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "tasks"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "workspace": { "type": "string" },
+    "outputDir": { "type": "string" },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string" },
+        "effort": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "xhigh", "max"]
+        },
+        "timeoutMs": { "type": "integer", "minimum": 1000 },
+        "maxBudgetUsd": { "type": "number", "minimum": 0 },
+        "permissionMode": {
+          "type": "string",
+          "enum": ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]
+        },
+        "addDirs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowedTools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "disallowedTools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "tools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "systemPrompt": { "type": "string" }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "prompt"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "title": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["plan", "implement", "review", "verify", "research", "other"]
+          },
+          "prompt": { "type": "string" },
+          "dependsOn": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "model": { "type": "string" },
+          "effort": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "xhigh", "max"]
+          },
+          "timeoutMs": { "type": "integer", "minimum": 1000 },
+          "maxBudgetUsd": { "type": "number", "minimum": 0 },
+          "permissionMode": {
+            "type": "string",
+            "enum": ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]
+          },
+          "addDirs": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "allowedTools": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "disallowedTools": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "tools": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "systemPrompt": { "type": "string" }
+        }
+      }
+    }
+  }
+}

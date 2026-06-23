@@ -1,0 +1,5 @@
+node_modules/
+.agent-runs/
+.agent-checks/
+*.log
+

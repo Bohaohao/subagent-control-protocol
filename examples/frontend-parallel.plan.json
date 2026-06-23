@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "workspace": "../../incense-cultivation-game",
+  "outputDir": "../../.agent-runs",
+  "defaults": {
+    "model": "sonnet",
+    "effort": "medium",
+    "timeoutMs": 600000,
+    "permissionMode": "acceptEdits",
+    "maxBudgetUsd": 1.0,
+    "addDirs": ["../../incense-cultivation-game"]
+  },
+  "tasks": [
+    {
+      "id": "plan-gameplay",
+      "title": "Plan the gameplay model",
+      "kind": "plan",
+      "prompt": "Review the current Vue project and propose a concise gameplay improvement plan. Do not edit files."
+    },
+    {
+      "id": "plan-visuals",
+      "title": "Plan the visual and animation layer",
+      "kind": "plan",
+      "prompt": "Review the current Vue project and propose a concise visual/animation improvement plan. Do not edit files."
+    },
+    {
+      "id": "review-current",
+      "title": "Review current implementation",
+      "kind": "review",
+      "dependsOn": ["plan-gameplay", "plan-visuals"],
+      "prompt": "Review the current implementation for bugs, layout issues, encoding problems, and missing verification. Do not edit files."
+    }
+  ]
+}

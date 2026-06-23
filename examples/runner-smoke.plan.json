@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "workspace": "..",
+  "outputDir": "../.agent-runs",
+  "defaults": {
+    "model": "sonnet",
+    "effort": "low",
+    "timeoutMs": 120000,
+    "permissionMode": "default",
+    "maxBudgetUsd": 0.2,
+    "tools": []
+  },
+  "tasks": [
+    {
+      "id": "runner-smoke",
+      "title": "Runner structured output smoke test",
+      "kind": "verify",
+      "prompt": "Do not inspect or edit files. Return a successful structured result saying the runner smoke test passed. Put one verification item named 'json-schema-output'."
+    }
+  ]
+}

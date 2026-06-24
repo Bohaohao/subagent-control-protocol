@@ -1,61 +1,59 @@
 # MCP optimization roadmap
 
-The shell-based runner in this kit is a stopgap. A first-class MCP should expose
-the same protocol directly.
+Subagent Control Protocol is now a first-class MCP server. This document tracks
+the remaining improvements that would make Codex-to-Claude delegation more
+observable, cancellable, and policy-aware.
 
-## Proposed tools
+## Current tools
 
-### `subagent.spawn`
+### `subagent_run_task`
 
 Input:
 
-- `taskId`
+- `id`
 - `workspace`
 - `prompt`
-- `outputSchema`
 - `model`
 - `timeoutMs`
-- `budgetUsd`
+- `maxBudgetUsd`
 - `permissionMode`
 - `allowedTools`
 
 Output:
 
-- `taskId`
-- `status`
+- `runSummary`
 - `result`
-- `stdoutPath`
-- `stderrPath`
-- `artifacts`
-- `metrics`
-- `startedAt`
-- `endedAt`
 
-### `subagent.run_many`
+### `subagent_run_many`
 
 Input:
 
 - `tasks`
-- `maxParallel`
-- `dependencyPolicy`
-- `sharedWorkspacePolicy`
+- `concurrency`
+- `workspace`
+- `outputDir`
 
 Output:
 
-- `runId`
-- `maxParallelObserved`
-- `results`
-- `failedTasks`
-- `skippedTasks`
-- `summaryPath`
+- `runSummary`
 
-### `subagent.cancel`
+### `subagent_cancel`
 
-Stops a specific task and its child process tree.
+Stops active child process trees when the MCP process can still see them.
 
-### `subagent.status`
+### `subagent_status`
 
-Returns live process state, elapsed time, latest log offsets, and known costs.
+Reads `run-summary.json` or lists recent runs.
+
+## Next improvements
+
+- Stream task progress events instead of returning only after task completion.
+- Persist active process metadata so cancellation can survive client reconnects.
+- Add explicit workspace edit policies, such as read-only, single-writer, and
+  declared file ownership.
+- Add token and cost normalization across Claude Code output variants.
+- Add a small result viewer for run directories.
+- Add JSON schema validation for user-provided task plans before execution.
 
 ## Why MCP is better than shell
 
@@ -64,4 +62,3 @@ Returns live process state, elapsed time, latest log offsets, and known costs.
 - It can expose real token/cost metrics when the provider supports them.
 - It can enforce workspace boundaries and edit policies.
 - It can handle Windows process trees reliably.
-

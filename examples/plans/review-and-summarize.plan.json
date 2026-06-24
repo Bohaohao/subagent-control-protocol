@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "workspace": "../..",
+  "outputDir": "../../.subagent-runs",
+  "concurrency": 2,
+  "defaults": {
+    "effort": "low",
+    "timeoutMs": 300000,
+    "permissionMode": "default",
+    "tools": []
+  },
+  "tasks": [
+    {
+      "id": "inspect-docs",
+      "title": "Inspect MCP documentation",
+      "kind": "review",
+      "prompt": "Read README.md and docs/*.md. Return a concise structured review of whether the repository presents itself as an installable MCP server."
+    },
+    {
+      "id": "inspect-schemas",
+      "title": "Inspect result schemas",
+      "kind": "review",
+      "prompt": "Read schemas/*.json. Return a concise structured review of whether task plans and agent results are controller-readable."
+    },
+    {
+      "id": "final-summary",
+      "title": "Summarize repository readiness",
+      "kind": "verify",
+      "dependsOn": ["inspect-docs", "inspect-schemas"],
+      "prompt": "Summarize the repository readiness as an MCP package. Include only JSON matching the requested schema."
+    }
+  ]
+}

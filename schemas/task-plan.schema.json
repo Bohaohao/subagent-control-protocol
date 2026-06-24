@@ -9,6 +9,8 @@
     "version": { "type": "integer", "const": 1 },
     "workspace": { "type": "string" },
     "outputDir": { "type": "string" },
+    "concurrency": { "type": "integer", "minimum": 1 },
+    "dryRun": { "type": "boolean" },
     "defaults": {
       "type": "object",
       "additionalProperties": false,

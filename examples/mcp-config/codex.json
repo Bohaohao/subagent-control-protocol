@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "subagent-control-protocol": {
+      "command": "node",
+      "args": ["D:/private/agent-orchestration-kit/src/server.mjs"],
+      "env": {
+        "CLAUDE_BIN": "claude"
+      }
+    }
+  }
+}

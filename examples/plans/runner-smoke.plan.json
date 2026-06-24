@@ -1,7 +1,8 @@
 {
   "version": 1,
-  "workspace": "..",
-  "outputDir": "../.agent-runs",
+  "workspace": "../..",
+  "outputDir": "../../.subagent-runs",
+  "concurrency": 1,
   "defaults": {
     "model": "sonnet",
     "effort": "low",

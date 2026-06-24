@@ -1,234 +1,179 @@
 # Subagent Control Protocol
 
-English | 中文
+**Subagent Control Protocol (SCP)** is an installable MCP server that lets Codex act as the controller and delegate bounded work to Claude Code CLI subagents.
 
-Subagent Control Protocol, or SCP, is an MCP-ready control plane for running
-Claude Code CLI as a bounded subagent under a Codex-style orchestrator.
+**Subagent Control Protocol（SCP）** 是一个可直接安装和配置的 MCP Server。它让 Codex 作为总控，把明确边界的任务分派给 Claude Code CLI 子 agent，并把执行结果以结构化形式收回。
 
-Subagent Control Protocol，简称 SCP，是一个面向 MCP 的子 agent 控制面。它让
-Codex 这类总控 agent 可以把 Claude Code CLI 当作可约束、可验证、可追踪的子
-agent 来调用。
+## What It Does
 
-> Current status: this repository is a local CLI reference implementation plus
-> MCP design. The next step is to wrap the same protocol as a first-class MCP
-> server.
->
-> 当前状态：本仓库是本地 CLI 参考实现 + MCP 设计稿。下一步会把同一套协议封装成
-> 一等 MCP server。
+SCP turns `claude -p` calls into controller-readable task runs:
 
-## What It Is
-
-SCP is not just a prompt template. It is a small execution layer that gives a
-controller agent a reliable way to:
-
-- start Claude Code subagent tasks;
-- run independent tasks in parallel;
-- enforce task dependencies;
-- capture stdout, stderr, raw Claude JSON, normalized results, and usage;
-- kill timed-out process trees;
-- run repeatable verification checks;
+- run one Claude subagent task;
+- run many dependency-aware tasks with bounded concurrency;
+- capture prompts, stdout, stderr, raw Claude JSON, normalized results, and run summaries;
+- kill timed-out Windows or Unix process trees;
+- expose status and best-effort cancellation through MCP tools;
 - keep generated run artifacts out of git.
 
-SCP 不只是 prompt 模板。它是一层小型执行控制层，让总控 agent 可以稳定地：
+SCP 的目标不是替代 Codex，而是补齐“总控调用子 agent”这条链路：
 
-- 启动 Claude Code 子 agent 任务；
-- 并行运行互不冲突的任务；
-- 管理任务依赖；
-- 捕获 stdout、stderr、Claude 原始 JSON、归一化结果和 usage；
-- 清理超时任务进程树；
-- 执行可重复的验证检查；
-- 避免把运行产物提交进 git。
+- Codex 决定任务拆分和验收标准；
+- Claude Code CLI 作为子 agent 执行局部任务；
+- MCP Server 负责进程、并发、日志、结构化输出和结果归档；
+- Codex 读取 `run-summary.json` 与 MCP `structuredContent`，再决定下一步。
 
-## Why This Exists
+## Install
 
-When Codex calls Claude Code directly through `claude -p`, the answer often
-comes back as free-form prose. That is hard for a controller to trust.
+Requirements:
 
-This project turns subagent execution into a contract:
+- Node.js 20+
+- Claude Code CLI installed and authenticated
+- A Codex or MCP-capable client
 
-1. The controller submits a task plan.
-2. Claude Code runs as one or more subagents.
-3. Each subagent returns structured JSON.
-4. The runner writes logs and normalized results.
-5. The controller reads machine-friendly evidence and decides the next step.
-
-当 Codex 直接通过 `claude -p` 调 Claude Code 时，返回结果往往是自然语言。自然语言
-适合人读，但不适合总控 agent 稳定判断。
-
-本项目把子 agent 执行变成一个契约：
-
-1. 总控提交任务计划。
-2. Claude Code 作为一个或多个子 agent 运行。
-3. 每个子 agent 返回结构化 JSON。
-4. runner 写入日志和归一化结果。
-5. 总控读取机器友好的证据，再决定下一步。
-
-## Typical Use Cases
-
-- Let Codex delegate planning, review, research, or verification to Claude.
-- Run multiple read-only review agents in parallel.
-- Keep implementation as a single-writer task while reviews run separately.
-- Capture token/cost usage for every Claude subagent call.
-- Verify frontend projects with headless Chrome after code changes.
-- Scan source files for mojibake or encoding residue before delivery.
-
-典型场景：
-
-- 让 Codex 把规划、审查、研究或验证任务派给 Claude。
-- 并行运行多个只读 review agent。
-- 让实现阶段保持单写者，同时让审查任务独立运行。
-- 记录每次 Claude 子 agent 调用的 token/cost usage。
-- 代码变更后用 headless Chrome 验证前端项目。
-- 交付前扫描源码中的乱码或编码残留。
-
-## Repository Layout
-
-```text
-.
-|-- docs/
-|   |-- mcp-optimization-roadmap.md
-|   `-- subagent-protocol.md
-|-- examples/
-|   |-- frontend-parallel.plan.json
-|   `-- runner-smoke.plan.json
-|-- schemas/
-|   |-- agent-result.schema.json
-|   `-- task-plan.schema.json
-|-- scripts/
-|   |-- check-text-health.mjs
-|   |-- run-claude-agents.mjs
-|   `-- verify-vite-app.mjs
-|-- package.json
-`-- README.md
-```
-
-## Requirements
-
-- Node.js 20 or newer.
-- Claude Code CLI installed and authenticated.
-- Git.
-- Google Chrome, only needed for frontend smoke verification.
-- Windows is supported. The runner resolves the real Claude executable behind
-  `claude.cmd` and can clean up process trees with `taskkill`.
-
-依赖要求：
-
-- Node.js 20 或更高版本。
-- 已安装并完成认证的 Claude Code CLI。
-- Git。
-- Google Chrome，仅前端烟测需要。
-- 支持 Windows。runner 会解析 `claude.cmd` 背后的真实 Claude 可执行文件，并可用
-  `taskkill` 清理进程树。
-
-## Quick Start
-
-Run a dry-run scheduler check:
+Clone and install:
 
 ```powershell
-node .\scripts\run-claude-agents.mjs --plan .\examples\frontend-parallel.plan.json --concurrency 2 --dry-run
+git clone https://github.com/Bohaohao/subagent-control-protocol.git
+cd subagent-control-protocol
+npm install
+npm run check
+npm run smoke:mcp
 ```
 
-Run a real Claude structured-output smoke test:
+Run as a local MCP server:
 
 ```powershell
-node .\scripts\run-claude-agents.mjs --plan .\examples\runner-smoke.plan.json --concurrency 1
+npm start
 ```
 
-Run the text health checker:
+Or through the package bin:
 
 ```powershell
-node .\scripts\check-text-health.mjs --root . --out .\.agent-checks\text-health-report.json
+npx subagent-control-protocol
 ```
 
-Run a Vite frontend smoke check:
+## MCP Configuration
 
-```powershell
-node .\scripts\verify-vite-app.mjs --project ..\your-vite-app --expected-text App --screenshot ..\.generated\frontend-smoke.png
+Example MCP config:
+
+```json
+{
+  "mcpServers": {
+    "subagent-control-protocol": {
+      "command": "node",
+      "args": ["D:/private/agent-orchestration-kit/src/server.mjs"],
+      "env": {
+        "CLAUDE_BIN": "claude"
+      }
+    }
+  }
+}
 ```
 
-快速开始：
+If installed globally or from a package path, use the bin:
 
-```powershell
-# 调度 dry-run，不实际调用 Claude
-node .\scripts\run-claude-agents.mjs --plan .\examples\frontend-parallel.plan.json --concurrency 2 --dry-run
-
-# 真实调用 Claude，验证结构化输出链路
-node .\scripts\run-claude-agents.mjs --plan .\examples\runner-smoke.plan.json --concurrency 1
-
-# 扫描文本健康状态
-node .\scripts\check-text-health.mjs --root . --out .\.agent-checks\text-health-report.json
-
-# 验证 Vite 前端项目
-node .\scripts\verify-vite-app.mjs --project ..\your-vite-app --expected-text App --screenshot ..\.generated\frontend-smoke.png
+```json
+{
+  "mcpServers": {
+    "subagent-control-protocol": {
+      "command": "subagent-control-protocol",
+      "args": []
+    }
+  }
+}
 ```
 
-## Creating A Task Plan
+如果 Claude 在 Windows 上通过 `claude.cmd` 启动，SCP 会尝试解析背后的真实 `claude.exe`，避免子进程和参数转义问题。也可以显式设置 `CLAUDE_BIN`。
 
-A task plan is a JSON file. It describes the workspace, shared Claude options,
-and the subagent tasks to run.
+## MCP Tools
 
-任务计划是一个 JSON 文件，用来描述工作目录、Claude 共享参数和要运行的子 agent
-任务。
+`subagent_run_task`
+
+Run one Claude Code subagent task and return a normalized result. Use this for a single review, implementation, research, or verification job.
+
+`subagent_run_many`
+
+Run multiple tasks with dependency control and bounded parallelism. Use this when the controller wants several read-only reviewers or verifiers to work in parallel.
+
+`subagent_status`
+
+Read one `run-summary.json`, or list recent run summaries from an output directory. This is how a controller can inspect prior runs without scraping terminal output.
+
+`subagent_cancel`
+
+Best-effort cancellation for active Claude child processes in the current MCP server process.
+
+## Task Plan Example
 
 ```json
 {
   "version": 1,
   "workspace": "../my-project",
-  "outputDir": "../.agent-runs",
+  "outputDir": "../.subagent-runs",
+  "concurrency": 2,
   "defaults": {
     "model": "sonnet",
-    "effort": "medium",
-    "timeoutMs": 600000,
-    "permissionMode": "acceptEdits"
+    "effort": "low",
+    "timeoutMs": 300000,
+    "permissionMode": "default",
+    "tools": []
   },
   "tasks": [
     {
-      "id": "review-layout",
-      "title": "Review the layout implementation",
+      "id": "review-api",
+      "title": "Review API changes",
       "kind": "review",
-      "prompt": "Review the current frontend layout for defects. Do not edit files."
+      "prompt": "Review the API layer for regressions. Do not edit files."
     },
     {
-      "id": "review-state",
-      "title": "Review state management",
+      "id": "review-tests",
+      "title": "Review tests",
       "kind": "review",
-      "prompt": "Review state management for bugs and missing edge cases. Do not edit files."
+      "prompt": "Review test coverage and identify missing high-value tests. Do not edit files."
     },
     {
-      "id": "summarize-findings",
-      "title": "Summarize review findings",
+      "id": "summarize",
+      "title": "Summarize findings",
       "kind": "verify",
-      "dependsOn": ["review-layout", "review-state"],
-      "tools": [],
-      "prompt": "Summarize the completed review outputs into a concise structured result."
+      "dependsOn": ["review-api", "review-tests"],
+      "prompt": "Summarize the completed review outputs as structured JSON."
     }
   ]
 }
 ```
 
-Run it:
+Run the same core through CLI:
 
 ```powershell
-node .\scripts\run-claude-agents.mjs --plan .\my-plan.json --concurrency 2
+node .\scripts\run-claude-agents.mjs --plan .\examples\plans\review-and-summarize.plan.json --concurrency 2 --dry-run
 ```
 
-运行：
+## Result Contract
 
-```powershell
-node .\scripts\run-claude-agents.mjs --plan .\my-plan.json --concurrency 2
-```
+Every Claude subagent is asked to return JSON matching `schemas/agent-result.schema.json`:
 
-## Reading The Output
+- `status`: `completed`, `partial`, `blocked`, or `failed`
+- `summary`: factual outcome
+- `filesChanged`: files changed and why
+- `commandsRun`: commands with pass/fail/skipped state
+- `verification`: checks and evidence
+- `risks`: remaining risks
+- `nextSteps`: concrete follow-up actions
+- `metrics`: optional token and cost metrics
 
-Each run writes a timestamped artifact directory:
+The runner also normalizes common variants such as `files_changed`, `verifications`, and `status: "passed"` into the official shape.
+
+## Run Artifacts
+
+Each run writes a timestamped directory:
 
 ```text
-.agent-runs/
-  2026-06-23T10-00-19-507Z/
+.subagent-runs/
+  2026-06-24T12-00-00-000Z/
     run-input.json
     run-summary.json
     tasks/
-      review-layout/
+      review-api/
         prompt.md
         task.json
         stdout.txt
@@ -237,144 +182,69 @@ Each run writes a timestamped artifact directory:
         result.json
 ```
 
-Important files:
+AI controllers should prefer these files in order:
 
-- `run-summary.json`: overall task status, max parallelism, failed tasks.
-- `tasks/<id>/result.json`: normalized result for one subagent.
-- `tasks/<id>/raw-output.json`: raw Claude JSON envelope.
-- `tasks/<id>/stdout.txt` and `stderr.txt`: process logs.
+1. `run-summary.json` for the whole run.
+2. `tasks/<id>/result.json` for one normalized task result.
+3. `tasks/<id>/raw-output.json` only when debugging Claude's original envelope.
+4. `stdout.txt` and `stderr.txt` only when process-level diagnosis is needed.
 
-重要文件：
+AI 总控读取顺序建议：
 
-- `run-summary.json`：整体任务状态、实际最大并行数、失败任务。
-- `tasks/<id>/result.json`：某个子 agent 的归一化结果。
-- `tasks/<id>/raw-output.json`：Claude 原始 JSON envelope。
-- `tasks/<id>/stdout.txt` 和 `stderr.txt`：进程日志。
+1. 先读 `run-summary.json` 判断总体是否完成。
+2. 再读 `tasks/<id>/result.json` 获取单个子任务的结构化结果。
+3. 只有调试 Claude 原始输出时才读 `raw-output.json`。
+4. 只有排查进程问题时才读 `stdout.txt` 和 `stderr.txt`。
 
-## MCP Tool Model
+## Repository Layout
 
-The current repository is a CLI reference implementation. The planned MCP
-server should expose the same control model through tools like:
-
-- `subagent.spawn`: start one subagent task.
-- `subagent.run_many`: run multiple dependency-aware tasks.
-- `subagent.cancel`: cancel one running task.
-- `subagent.status`: inspect live task status and log offsets.
-
-当前仓库是 CLI 参考实现。计划中的 MCP server 应该通过以下工具暴露同一套控制模型：
-
-- `subagent.spawn`：启动一个子 agent 任务。
-- `subagent.run_many`：运行多个带依赖关系的任务。
-- `subagent.cancel`：取消一个运行中的任务。
-- `subagent.status`：查看实时任务状态和日志偏移。
-
-See `docs/mcp-optimization-roadmap.md` for the full design.
-
-完整设计见 `docs/mcp-optimization-roadmap.md`。
-
-## CLI Tools
-
-### `run-claude-agents.mjs`
-
-Runs Claude Code subagents from a task plan.
-
-```powershell
-node .\scripts\run-claude-agents.mjs --plan .\examples\runner-smoke.plan.json --concurrency 1
+```text
+.
+|-- bin/
+|   `-- subagent-control-protocol.mjs
+|-- docs/
+|   |-- mcp-optimization-roadmap.md
+|   `-- subagent-protocol.md
+|-- examples/
+|   |-- mcp-config/
+|   `-- plans/
+|-- schemas/
+|   |-- agent-result.schema.json
+|   `-- task-plan.schema.json
+|-- scripts/
+|   |-- check-text-health.mjs
+|   |-- run-claude-agents.mjs
+|   `-- smoke-mcp.mjs
+|-- src/
+|   |-- core/
+|   `-- server.mjs
+`-- package.json
 ```
 
-Key options:
+## Safety Notes
 
-- `--plan PATH`: task plan JSON.
-- `--concurrency N`: max parallel tasks.
-- `--dry-run`: write commands and prompts without invoking Claude.
-- `--workspace PATH`: override the plan workspace.
-- `--out PATH`: override the output directory.
-- `--claude PATH`: override the Claude executable.
+- Do not commit API keys, Claude tokens, browser profiles, or run logs.
+- Use private repositories when prompts may contain proprietary project context.
+- Keep implementation tasks single-writer unless file ownership is explicit.
+- Use parallelism first for planning, research, review, and verification.
+- Use `dryRun: true` when checking task decomposition or MCP wiring.
 
-### `check-text-health.mjs`
+## 中文速览
 
-Scans text files for replacement characters and common mojibake patterns.
+SCP 是“Codex 总控 + Claude 子 agent”的 MCP 化执行层。它解决的核心问题是：总控不仅能发起 Claude Code CLI 任务，还能拿回可机读、可追踪、可复盘的结果。
+
+常见用法：
+
+- 让多个 Claude 子 agent 并行做 review、research、verify；
+- 让实现任务保持单写者，避免并发改同一批文件；
+- 对每次子 agent 调用留下 prompt、日志、原始输出和归一化结果；
+- 让 Codex 根据 `structuredContent` 或 `run-summary.json` 做下一步决策。
+
+最小验证：
 
 ```powershell
-node .\scripts\check-text-health.mjs --root . --out .\.agent-checks\text-health-report.json
+npm install
+npm run check
+npm run smoke:mcp
+node .\scripts\run-claude-agents.mjs --plan .\examples\plans\runner-smoke.plan.json --dry-run
 ```
-
-### `verify-vite-app.mjs`
-
-Builds or serves a Vite app, opens it with headless Chrome, checks expected
-text, and captures a screenshot.
-
-```powershell
-node .\scripts\verify-vite-app.mjs --project ..\your-vite-app --expected-text App
-```
-
-## Subagent Result Contract
-
-Each subagent should return a result compatible with
-`schemas/agent-result.schema.json`.
-
-每个子 agent 应返回兼容 `schemas/agent-result.schema.json` 的结构化结果。
-
-Core fields:
-
-- `status`: `completed`, `partial`, `blocked`, or `failed`.
-- `summary`: factual summary.
-- `filesChanged`: changed files.
-- `commandsRun`: commands and pass/fail/skipped state.
-- `verification`: checks and evidence.
-- `risks`: remaining risks.
-- `nextSteps`: concrete follow-up actions.
-- `metrics`: optional token/cost metrics.
-
-The runner also normalizes common variants such as `files_changed`,
-`verifications`, and `status: "passed"` into the official result shape.
-
-runner 也会把 `files_changed`、`verifications`、`status: "passed"` 等常见变体
-归一化成正式结果结构。
-
-## Practical Guidance
-
-- Use parallelism for planning, research, review, and verification.
-- Keep implementation single-writer unless file ownership is explicit.
-- Use `"tools": []` for pure structured-output tasks.
-- Avoid `permissionMode: "plan"` for one-shot JSON tasks.
-- Keep `.agent-runs/` and `.agent-checks/` out of git.
-- Use low budgets for smoke tests.
-
-实践建议：
-
-- 规划、研究、审查、验证适合并行。
-- 实现阶段默认单写者，除非文件边界非常清楚。
-- 纯结构化输出任务使用 `"tools": []`。
-- 一次性 JSON 任务避免使用 `permissionMode: "plan"`。
-- 不要把 `.agent-runs/` 和 `.agent-checks/` 提交进 git。
-- smoke test 使用低预算。
-
-## Safety
-
-- Do not commit API keys, tokens, local browser data, or run logs.
-- Use private repositories when task prompts may contain project context.
-- Review `raw-output.json` before sharing logs outside your organization.
-
-安全说明：
-
-- 不要提交 API key、token、本地浏览器数据或运行日志。
-- 当任务 prompt 可能包含项目上下文时，默认使用私有仓库。
-- 对外分享日志前，先审查 `raw-output.json`。
-
-## Status
-
-Verified locally on Windows:
-
-- runner dry-run scheduling;
-- real Claude structured-output smoke test;
-- text health checks;
-- Vite frontend smoke verification.
-
-已在 Windows 本地验证：
-
-- runner dry-run 调度；
-- Claude 真实结构化输出 smoke test；
-- 文本健康检查；
-- Vite 前端烟测。
-

@@ -1,9 +1,9 @@
 {
   "name": "subagent-control-protocol",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "A local control protocol for Codex-led Claude Code subagents with structured results, process governance, and verification tooling.",
+  "description": "Installable MCP server for Codex-led Claude Code subagents with structured execution results.",
   "keywords": [
     "codex",
     "claude-code",
@@ -12,10 +12,19 @@
     "orchestration",
     "verification"
   ],
+  "bin": {
+    "subagent-control-protocol": "./bin/subagent-control-protocol.mjs"
+  },
   "scripts": {
+    "start": "node ./src/server.mjs",
     "agent:run": "node scripts/run-claude-agents.mjs",
-    "text:check": "node scripts/check-text-health.mjs",
-    "frontend:verify": "node scripts/verify-vite-app.mjs"
+    "smoke:mcp": "node scripts/smoke-mcp.mjs",
+    "text:check": "node scripts/check-text-health.mjs --root . --out ./.agent-checks/text-health-report.json",
+    "check": "node --check ./bin/subagent-control-protocol.mjs && node --check ./src/server.mjs && node --check ./src/core/claude-runner.mjs && node --check ./src/core/scheduler.mjs && node --check ./src/core/result-normalizer.mjs && node --check ./src/core/process-tree.mjs && node --check ./scripts/run-claude-agents.mjs && node --check ./scripts/smoke-mcp.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
   },
   "engines": {
     "node": ">=20"

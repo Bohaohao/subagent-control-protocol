@@ -59,21 +59,75 @@ export async function killProcessTree(pid) {
   if (!pid) return false
 
   if (process.platform === 'win32') {
-    await new Promise((resolve) => {
-      const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
-        stdio: 'ignore',
-        windowsHide: true,
-      })
-      killer.on('close', resolve)
-      killer.on('error', resolve)
-    })
-    return true
+    return killWindowsTree(pid)
   }
 
-  try {
-    process.kill(pid, 'SIGTERM')
-    return true
-  } catch {
-    return false
+  return killUnixTree(pid)
+}
+
+function killWindowsTree(pid) {
+  return new Promise((resolve) => {
+    const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    let done = false
+    const finish = (ok) => {
+      if (done) return
+      done = true
+      resolve(ok)
+    }
+    killer.on('close', (code) => finish(code === 0 || code === 128))
+    killer.on('error', () => finish(false))
+  })
+}
+
+async function killUnixTree(pid) {
+  // Collect descendants first (children before parents), then signal the whole
+  // tree. SIGTERM first, then escalate to SIGKILL if anything is still alive.
+  const pids = [pid, ...(await collectDescendants(pid))].reverse()
+  for (const target of pids) {
+    try {
+      process.kill(target, 'SIGTERM')
+    } catch {
+      // Already gone.
+    }
   }
+
+  await new Promise((resolve) => setTimeout(resolve, 1500))
+
+  for (const target of pids) {
+    try {
+      process.kill(target, 'SIGKILL')
+    } catch {
+      // Already gone, or not ours.
+    }
+  }
+  return true
+}
+
+async function collectDescendants(pid, seen = new Set()) {
+  if (seen.has(pid)) return []
+  seen.add(pid)
+  let children = []
+  try {
+    const result = await captureProcess('pgrep', ['-P', String(pid)], process.cwd(), 5000)
+    if (result.exitCode === 0) {
+      children = result.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map(Number)
+        .filter((value) => Number.isInteger(value))
+    }
+  } catch {
+    // pgrep unavailable; best-effort single-process kill only.
+    return []
+  }
+
+  const all = []
+  for (const child of children) {
+    all.push(child, ...(await collectDescendants(child, seen)))
+  }
+  return all
 }

@@ -7,14 +7,18 @@ import {
   normalizeAgentResult,
   normalizeStatus,
   parseAgentResult,
+  summarizeUsage,
 } from './result-normalizer.mjs'
 import { safeJsonParse, writeJson } from './json.mjs'
 import { captureProcess, exists, killProcessTree } from './process-tree.mjs'
 
 const activeProcesses = new Map()
 
-export function listActiveProcesses() {
-  return [...activeProcesses.values()].map(({ runId, taskId, title, pid, startedAt }) => ({
+export function listActiveProcesses(runId) {
+  const records = runId
+    ? [...activeProcesses.values()].filter((record) => record.runId === runId)
+    : [...activeProcesses.values()]
+  return records.map(({ runId, taskId, title, pid, startedAt }) => ({
     runId,
     taskId,
     title,
@@ -25,6 +29,9 @@ export function listActiveProcesses() {
 
 export async function cancelActiveRun(runId) {
   const targets = [...activeProcesses.values()].filter((record) => record.runId === runId)
+  targets.forEach((record) => {
+    record.cancelled = true
+  })
   await Promise.all(targets.map((record) => killProcessTree(record.pid)))
   return { runId, cancelledProcesses: targets.length }
 }
@@ -35,7 +42,13 @@ export async function runClaudeTask(task, context) {
 
   const startedAt = new Date().toISOString()
   const prompt = buildPrompt(task)
-  const command = buildClaudeCommand(task, context.schema, context.claudeExecutable, context.claudeBaseArgs)
+  const command = buildClaudeCommand(
+    task,
+    context.schema,
+    context.claudeExecutable,
+    context.claudeBaseArgs,
+    [taskDir],
+  )
 
   await fs.writeFile(path.join(taskDir, 'prompt.md'), prompt, 'utf8')
   await writeJson(path.join(taskDir, 'task.json'), {
@@ -58,6 +71,7 @@ export async function runClaudeTask(task, context) {
       taskDir,
       exitCode: 0,
       timedOut: false,
+      cancelled: false,
       parsed: {
         status: 'completed',
         summary: 'Dry run only; Claude Code CLI was not invoked.',
@@ -66,7 +80,11 @@ export async function runClaudeTask(task, context) {
         verification: [{ check: 'dry-run', status: 'passed', evidence: command.display }],
         risks: [],
         nextSteps: [],
+        tokenUsageSummary: 'Dry run; Claude Code CLI was not invoked, so exact token usage was not visible to a Claude subagent.',
+        metrics: {},
       },
+      usage: null,
+      measuredUsageSummary: 'Dry run; no token usage was measured.',
       command: command.display,
     }
     await writeJson(path.join(taskDir, 'result.json'), dryResult)
@@ -76,6 +94,7 @@ export async function runClaudeTask(task, context) {
   const execution = await spawnClaude({
     executable: command.executable,
     args: command.args,
+    shell: command.shell,
     prompt,
     cwd: task.workspace,
     timeoutMs: task.timeoutMs,
@@ -96,6 +115,7 @@ export async function runClaudeTask(task, context) {
   const parsed = normalizeAgentResult(rawParsed)
   const status = normalizeStatus(execution, parsed)
   const endedAt = new Date().toISOString()
+  const rawValue = raw.ok ? raw.value : null
   const result = {
     id: task.id,
     title: task.title,
@@ -106,10 +126,12 @@ export async function runClaudeTask(task, context) {
     exitCode: execution.exitCode,
     signal: execution.signal,
     timedOut: execution.timedOut,
+    cancelled: Boolean(execution.cancelled),
     durationMs: Date.parse(endedAt) - Date.parse(startedAt),
     parsed,
     rawParsed,
-    usage: extractUsage(raw.ok ? raw.value : parsed),
+    usage: extractUsage(rawValue || parsed),
+    measuredUsageSummary: summarizeUsage(rawValue || parsed),
     command: command.display,
   }
 
@@ -120,21 +142,43 @@ export async function runClaudeTask(task, context) {
 export async function resolveClaudeExecutable(preferred) {
   if (preferred) {
     const value = String(preferred)
-    return /[\\/:]/.test(value) ? path.resolve(value) : value
+    if (process.platform === 'win32' && !/[\\/:]/.test(value)) {
+      const target = await resolveWindowsCommand(value)
+      if (target) return target
+    }
+    const resolved = /[\\/:]/.test(value) ? path.resolve(value) : value
+    // An explicit .cmd override still needs to be unpacked into its underlying
+    // node/exe target so we can spawn it without a shell.
+    if (/\.cmd$/i.test(resolved) && /[\\/:]/.test(resolved)) {
+      const target = await resolveTargetFromCmd(resolved)
+      if (target) return { ...target, shell: false }
+    }
+    return { executable: resolved, preArgs: [], shell: false }
   }
 
-  if (process.platform !== 'win32') return 'claude'
+  if (process.platform !== 'win32') return { executable: 'claude', preArgs: [], shell: false }
 
-  const where = await captureProcess('where.exe', ['claude'], process.cwd(), 10000)
+  return await resolveWindowsCommand('claude')
+    || { executable: 'claude.cmd', preArgs: [], shell: true }
+}
+
+async function resolveWindowsCommand(commandName) {
+  const where = await captureProcess('where.exe', [commandName], process.cwd(), 10000)
   const candidates = where.stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
 
   for (const candidate of candidates) {
-    if (candidate.toLowerCase().endsWith('.cmd')) {
-      const exe = await resolveExeFromCmd(candidate)
-      if (exe) return exe
+    const lower = candidate.toLowerCase()
+    if (lower.endsWith('.cmd')) {
+      const target = await resolveTargetFromCmd(candidate)
+      if (target) return { ...target, shell: false }
+      continue
+    }
+    if (lower.endsWith('.exe')) {
+      if (await exists(candidate)) return { executable: candidate, preArgs: [], shell: false }
+      continue
     }
     const siblingExe = path.join(
       path.dirname(candidate),
@@ -144,10 +188,16 @@ export async function resolveClaudeExecutable(preferred) {
       'bin',
       'claude.exe',
     )
-    if (await exists(siblingExe)) return siblingExe
+    if (await exists(siblingExe)) return { executable: siblingExe, preArgs: [], shell: false }
   }
 
-  return 'claude.cmd'
+  // Last resort: drive a .cmd wrapper through cmd.exe. Arg quoting for the
+  // JSON schema is fragile here, so this only triggers when unpacking failed.
+  const cmdCandidate = candidates.find((candidate) => candidate.toLowerCase().endsWith('.cmd'))
+  if (cmdCandidate) {
+    return { executable: 'cmd.exe', preArgs: ['/c', cmdCandidate], shell: false }
+  }
+  return null
 }
 
 export function buildPrompt(task) {
@@ -165,14 +215,17 @@ Controller rules:
 - Return only JSON matching the provided schema.
 - Do not include markdown fences around the JSON.
 - Be precise about files changed, commands run, verification evidence, risks, and next steps.
+- Always include tokenUsageSummary as a string. If exact token counts are not visible to you while composing the result, say that clearly and do not invent exact counts.
 
 Task:
 ${task.prompt}
 `
 }
 
-function buildClaudeCommand(task, schema, executable, claudeBaseArgs = []) {
+function buildClaudeCommand(task, schema, claudeResolved, claudeBaseArgs = [], extraDirs = []) {
+  const { executable, preArgs = [], shell = false } = claudeResolved || {}
   const args = [
+    ...preArgs,
     ...claudeBaseArgs,
     '-p',
     '--output-format',
@@ -186,6 +239,7 @@ function buildClaudeCommand(task, schema, executable, claudeBaseArgs = []) {
     task.permissionMode,
   ]
   const displayArgs = [
+    ...preArgs,
     ...claudeBaseArgs,
     '-p',
     '--output-format',
@@ -203,7 +257,10 @@ function buildClaudeCommand(task, schema, executable, claudeBaseArgs = []) {
   pushOptionalArg(args, displayArgs, task.effort, '--effort')
   pushOptionalArg(args, displayArgs, task.maxBudgetUsd, '--max-budget-usd')
   pushOptionalArg(args, displayArgs, task.systemPrompt, '--append-system-prompt')
-  for (const dir of task.addDirs) {
+  // Always expose the task's own artifact dir so a large prompt saved to
+  // prompt.md (outside the workspace) stays readable by the subagent.
+  const allDirs = [...new Set([...task.addDirs, ...extraDirs].filter(Boolean))]
+  for (const dir of allDirs) {
     args.push('--add-dir', dir)
     displayArgs.push('--add-dir', dir)
   }
@@ -217,6 +274,7 @@ function buildClaudeCommand(task, schema, executable, claudeBaseArgs = []) {
   return {
     executable,
     args,
+    shell,
     display: `${quoteArg(executable)} ${displayArgs.map(quoteArg).join(' ')} < prompt.md`,
   }
 }
@@ -236,7 +294,7 @@ function spawnClaude(options) {
     const child = spawn(options.executable, options.args, {
       cwd: options.cwd,
       env: { ...process.env, ...(options.env || {}) },
-      shell: false,
+      shell: options.shell ?? false,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     })
@@ -249,28 +307,35 @@ function spawnClaude(options) {
     const stderrPath = path.join(options.taskDir, 'stderr.txt')
     const activeKey = `${options.runId}:${options.taskId}`
 
-    activeProcesses.set(activeKey, {
+    const record = {
       runId: options.runId,
       taskId: options.taskId,
       title: options.title,
       pid: child.pid,
       startedAt: new Date().toISOString(),
-    })
-
-    const timeout = setTimeout(async () => {
-      timedOut = true
-      await killProcessTree(child.pid)
-    }, options.timeoutMs)
+      cancelled: false,
+    }
+    activeProcesses.set(activeKey, record)
 
     const finish = async ({ exitCode, signal }) => {
       if (settled) return
       settled = true
       clearTimeout(timeout)
+      clearTimeout(killGraceTimeout)
       activeProcesses.delete(activeKey)
       await fs.writeFile(stdoutPath, stdout, 'utf8')
       await fs.writeFile(stderrPath, stderr, 'utf8')
-      resolve({ stdout, stderr, exitCode, signal, timedOut })
+      resolve({ stdout, stderr, exitCode, signal, timedOut, cancelled: Boolean(record.cancelled) })
     }
+
+    let killGraceTimeout = null
+    const timeout = setTimeout(async () => {
+      timedOut = true
+      await killProcessTree(child.pid)
+      killGraceTimeout = setTimeout(async () => {
+        await finish({ exitCode: 1, signal: 'timeout_grace_expired' })
+      }, 10000)
+    }, options.timeoutMs)
 
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
@@ -288,17 +353,44 @@ function spawnClaude(options) {
       await finish({ exitCode, signal })
     })
 
+    child.stdin.on('error', () => {
+      // The child may exit before reading the whole prompt; close/error events
+      // still settle the task and persist stderr/stdout.
+    })
     child.stdin.end(stdinPrompt)
   })
 }
 
-async function resolveExeFromCmd(cmdPath) {
+async function resolveTargetFromCmd(cmdPath) {
   try {
     const content = await fs.readFile(cmdPath, 'utf8')
-    const match = content.match(/"([^"]*claude\.exe)"/i)
-    if (!match) return null
-    const exePath = match[1].replace(/%dp0%\\?/i, path.dirname(cmdPath) + path.sep)
-    return await exists(exePath) ? exePath : null
+    const dir = path.dirname(cmdPath)
+    const expand = (value) =>
+      value
+        .replace(/%~dp0\\?/gi, dir + path.sep)
+        .replace(/%dp0%\\?/gi, dir + path.sep)
+
+    // npm-generated .cmd shims invoke `node "...\cli.js" %*`. Prefer unpacking
+    // to the node binary + script so we can spawn without a shell (which would
+    // mangle the --json-schema argument quoting on Windows).
+    const scriptMatch = content.match(/"([^"]*\.(?:js|cjs|mjs))"/i)
+    if (scriptMatch) {
+      const scriptPath = expand(scriptMatch[1])
+      if (await exists(scriptPath)) {
+        const nodeMatch = content.match(/"([^"]*node(?:\.exe)?)"/i)
+        const nodeBin = nodeMatch ? expand(nodeMatch[1]) : process.execPath
+        const executable = (await exists(nodeBin)) ? nodeBin : process.execPath
+        return { executable, preArgs: [scriptPath] }
+      }
+    }
+
+    const exeMatch = content.match(/"([^"]*claude\.exe)"/i)
+    if (exeMatch) {
+      const exePath = expand(exeMatch[1])
+      if (await exists(exePath)) return { executable: exePath, preArgs: [] }
+    }
+
+    return null
   } catch {
     return null
   }

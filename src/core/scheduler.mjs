@@ -7,6 +7,10 @@ import { createRunId, readJson, writeJson } from './json.mjs'
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const resultSchemaPath = path.join(packageRoot, 'schemas', 'agent-result.schema.json')
 
+// runId -> { cancelled: boolean }. Lets cancelRun() stop pending tasks, not just
+// kill the currently-running Claude processes.
+const activeRuns = new Map()
+
 export async function runTaskPlan(plan, options = {}) {
   assertPlanShape(plan)
 
@@ -63,19 +67,29 @@ export async function runTaskPlan(plan, options = {}) {
     env: options.env,
     startedAt: new Date().toISOString(),
     maxParallelObserved: 0,
+    cancellation: { cancelled: false },
   }
 
-  const results = await runTasks(tasks, scheduler)
-  const endedAt = new Date().toISOString()
-  const summary = summarizeRun({ ...scheduler, endedAt }, tasks, results)
-  await writeJson(path.join(runDir, 'run-summary.json'), summary)
-  return summary
+  activeRuns.set(runId, scheduler.cancellation)
+  try {
+    const results = await runTasks(tasks, scheduler)
+    const endedAt = new Date().toISOString()
+    const summary = summarizeRun({ ...scheduler, endedAt }, tasks, results)
+    await writeJson(path.join(runDir, 'run-summary.json'), summary)
+    return summary
+  } finally {
+    activeRuns.delete(runId)
+  }
 }
 
 export async function loadRunStatus({ runDir, outputDir, limit = 20 } = {}) {
   if (runDir) {
-    const summaryPath = path.join(path.resolve(runDir), 'run-summary.json')
-    return { mode: 'single', summary: await readJson(summaryPath), active: listActiveProcesses() }
+    const resolved = path.resolve(runDir)
+    const summaryPath = path.join(resolved, 'run-summary.json')
+    const summary = await readJson(summaryPath)
+    // Report only this run's active processes, not every run the server knows about.
+    const runId = summary?.runId || path.basename(resolved)
+    return { mode: 'single', summary, active: listActiveProcesses(runId) }
   }
 
   const baseDir = path.resolve(outputDir || path.join(process.cwd(), '.subagent-runs'))
@@ -106,6 +120,10 @@ export async function loadRunStatus({ runDir, outputDir, limit = 20 } = {}) {
 }
 
 export async function cancelRun(runId) {
+  // Signal the scheduler loop to stop starting pending tasks, then kill the
+  // Claude processes that are already running for this run.
+  const cancellation = activeRuns.get(runId)
+  if (cancellation) cancellation.cancelled = true
   return cancelActiveRun(runId)
 }
 
@@ -127,6 +145,25 @@ function normalizeTask(task, defaults, workspace, planDir) {
   const addDirs = unique([workspace, ...(defaults.addDirs || []), ...(task.addDirs || [])])
     .map((dir) => path.resolve(planDir, dir))
 
+  const timeoutMs = Number(merged.timeoutMs || 600000)
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1000) {
+    throw new Error(`Task ${task.id} has invalid timeoutMs: ${merged.timeoutMs} (must be an integer >= 1000)`)
+  }
+
+  // Read-only safety for review/verify work: when the caller has not customized
+  // tool restrictions, block the mutating file-edit tools so a review can't
+  // rewrite the repo it is inspecting. Explicit allowedTools/disallowedTools opt out.
+  const readOnlyKind = task.kind === 'review' || task.kind === 'verify'
+  const callerRestrictedTools = Boolean(
+    (task.allowedTools && task.allowedTools.length) || (task.disallowedTools && task.disallowedTools.length),
+  )
+  const disallowedTools = [...(merged.disallowedTools || [])]
+  if (readOnlyKind && !callerRestrictedTools) {
+    for (const tool of ['Edit', 'Write', 'NotebookEdit']) {
+      if (!disallowedTools.includes(tool)) disallowedTools.push(tool)
+    }
+  }
+
   return {
     id: task.id,
     title: task.title,
@@ -135,12 +172,12 @@ function normalizeTask(task, defaults, workspace, planDir) {
     dependsOn: task.dependsOn || [],
     model: merged.model,
     effort: merged.effort,
-    timeoutMs: Number(merged.timeoutMs || 600000),
+    timeoutMs,
     maxBudgetUsd: merged.maxBudgetUsd,
     permissionMode: merged.permissionMode || 'default',
     addDirs,
     allowedTools: merged.allowedTools || [],
-    disallowedTools: merged.disallowedTools || [],
+    disallowedTools,
     tools: merged.tools,
     systemPrompt: merged.systemPrompt || '',
     workspace,
@@ -148,7 +185,13 @@ function normalizeTask(task, defaults, workspace, planDir) {
 }
 
 function validateDependencies(tasks) {
-  const ids = new Set(tasks.map((task) => task.id))
+  const ids = new Set()
+  for (const task of tasks) {
+    if (ids.has(task.id)) {
+      throw new Error(`Duplicate task id: ${task.id}`)
+    }
+    ids.add(task.id)
+  }
   for (const task of tasks) {
     for (const dep of task.dependsOn) {
       if (!ids.has(dep)) {
@@ -165,6 +208,18 @@ async function runTasks(tasks, scheduler) {
   const results = []
 
   while (pending.size || running.size) {
+    // If the run was cancelled, stop starting new tasks: mark everything still
+    // pending as cancelled and let the already-running (and being-killed) tasks
+    // drain through the normal completion path below.
+    if (scheduler.cancellation.cancelled && pending.size) {
+      for (const [taskId, task] of pending) {
+        const cancelled = await writeCancelledTask(task, scheduler)
+        finished.set(taskId, cancelled)
+        results.push(cancelled)
+      }
+      pending.clear()
+    }
+
     let startedAny = false
 
     for (const [taskId, task] of pending) {
@@ -226,6 +281,22 @@ async function writeSkippedTask(task, scheduler, failedDep) {
   return result
 }
 
+async function writeCancelledTask(task, scheduler) {
+  const taskDir = path.join(scheduler.runDir, 'tasks', task.id)
+  const now = new Date().toISOString()
+  const result = {
+    id: task.id,
+    title: task.title,
+    status: 'cancelled',
+    startedAt: now,
+    endedAt: now,
+    taskDir,
+    reason: 'Run cancelled before this task started',
+  }
+  await writeJson(path.join(taskDir, 'result.json'), result)
+  return result
+}
+
 async function writeFailedTask(task, scheduler, error) {
   const taskDir = path.join(scheduler.runDir, 'tasks', task.id)
   const now = new Date().toISOString()
@@ -258,6 +329,7 @@ function summarizeRun(scheduler, tasks, results) {
     blockedTasks: results.filter((result) => result.status === 'blocked').length,
     failedTasks: results.filter((result) => result.status === 'failed').length,
     skippedTasks: results.filter((result) => result.status === 'skipped').length,
+    cancelledTasks: results.filter((result) => result.status === 'cancelled').length,
     timedOutTasks: results.filter((result) => result.status === 'timed_out').length,
     tasks: results,
   }

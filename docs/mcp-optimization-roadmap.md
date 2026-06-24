@@ -39,7 +39,12 @@ Output:
 
 ### `subagent_cancel`
 
-Stops active child process trees when the MCP process can still see them.
+Input:
+
+- `runId`
+
+Stops active child process trees when the MCP process can still see them, and
+prevents the scheduler from starting tasks that are still pending.
 
 ### `subagent_status`
 

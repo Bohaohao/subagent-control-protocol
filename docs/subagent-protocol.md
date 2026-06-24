@@ -29,7 +29,14 @@ The result must match `schemas/agent-result.schema.json`:
 - `verification`: checks with evidence
 - `risks`: remaining risks with severity
 - `nextSteps`: concrete next actions, empty when none
+- `tokenUsageSummary`: Claude-authored note about token visibility; it must not
+  invent exact counts
 - `metrics`: optional token/cost fields when available
+
+The controller wraps each task with measured process metadata. Top-level task
+status may also be `skipped`, `timed_out`, or `cancelled`. When the Claude CLI
+reports measured usage, the controller records `usage` plus
+`measuredUsageSummary` alongside Claude's own `tokenUsageSummary`.
 
 ## Recommended task split
 

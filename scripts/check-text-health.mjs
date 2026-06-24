@@ -18,19 +18,17 @@ async function main() {
   const root = path.resolve(String(args.root || process.cwd()))
   const outPath = args.out ? path.resolve(String(args.out)) : path.join(root, '.agent-checks', 'text-health-report.json')
   const extensions = new Set(asArray(args.include).length ? asArray(args.include) : [
-    '.css',
-    '.html',
     '.js',
     '.json',
     '.md',
     '.mjs',
     '.ts',
-    '.tsx',
-    '.vue',
   ])
   const skipDirs = new Set([
-    '.agent-checks',
     '.agent-runs',
+    '.agent-checks',
+    '.scp-runs',
+    '.subagent-runs',
     '.git',
     'dist',
     'node_modules',

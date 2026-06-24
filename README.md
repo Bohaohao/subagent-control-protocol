@@ -46,22 +46,30 @@ Run as a local MCP server:
 npm start
 ```
 
-Or through the package bin:
+Or run the package bin directly. The package is private and not distributed via the npm registry:
 
 ```powershell
-npx subagent-control-protocol
+node .\bin\subagent-control-protocol.mjs
+```
+
+To invoke it by name from anywhere, link it locally first:
+
+```powershell
+npm link
+subagent-control-protocol
 ```
 
 ## MCP Configuration
 
-Example MCP config:
+Point your MCP client at this server. For local development, run the server
+entrypoint directly with an absolute path to your cloned checkout:
 
 ```json
 {
   "mcpServers": {
     "subagent-control-protocol": {
       "command": "node",
-      "args": ["D:/private/agent-orchestration-kit/src/server.mjs"],
+      "args": ["/absolute/path/to/subagent-control-protocol/src/server.mjs"],
       "env": {
         "CLAUDE_BIN": "claude"
       }
@@ -70,14 +78,17 @@ Example MCP config:
 }
 ```
 
-If installed globally or from a package path, use the bin:
+If you linked the package (`npm link`) or installed it globally from a checkout, use the bin instead:
 
 ```json
 {
   "mcpServers": {
     "subagent-control-protocol": {
       "command": "subagent-control-protocol",
-      "args": []
+      "args": [],
+      "env": {
+        "CLAUDE_BIN": "claude"
+      }
     }
   }
 }
@@ -101,7 +112,7 @@ Read one `run-summary.json`, or list recent run summaries from an output directo
 
 `subagent_cancel`
 
-Best-effort cancellation for active Claude child processes in the current MCP server process.
+Best-effort cancellation for active Claude child processes in the current MCP server process. It requires `runId`.
 
 ## Task Plan Example
 
@@ -159,9 +170,11 @@ Every Claude subagent is asked to return JSON matching `schemas/agent-result.sch
 - `verification`: checks and evidence
 - `risks`: remaining risks
 - `nextSteps`: concrete follow-up actions
+- `tokenUsageSummary`: Claude-authored note about whether exact token usage was visible
 - `metrics`: optional token and cost metrics
 
 The runner also normalizes common variants such as `files_changed`, `verifications`, and `status: "passed"` into the official shape.
+The controller also records measured usage from the Claude CLI envelope as `usage` and `measuredUsageSummary` when available.
 
 ## Run Artifacts
 
@@ -228,6 +241,7 @@ AI 总控读取顺序建议：
 - Keep implementation tasks single-writer unless file ownership is explicit.
 - Use parallelism first for planning, research, review, and verification.
 - Use `dryRun: true` when checking task decomposition or MCP wiring.
+- Treat `permissionMode: "bypassPermissions"` and `"auto"` as privileged modes; prefer isolated workspaces for delegated tasks.
 
 ## 中文速览
 

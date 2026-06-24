@@ -11,7 +11,8 @@
     "commandsRun",
     "verification",
     "risks",
-    "nextSteps"
+    "nextSteps",
+    "tokenUsageSummary"
   ],
   "properties": {
     "status": {
@@ -86,6 +87,11 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "tokenUsageSummary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Claude-authored summary of whether exact token usage was visible to the subagent. The subagent must not fabricate exact token counts."
+    },
     "metrics": {
       "type": "object",
       "additionalProperties": true,
@@ -98,4 +104,3 @@
     }
   }
 }
-

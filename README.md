@@ -40,9 +40,22 @@ Run artifacts  (.subagent-runs/<ts>/...)
 
 四层分工：Codex 总控负责拆分与集成；Skill 层定义何时/如何委派；MCP 层负责进程、并发、超时与结构化输出；Claude Code CLI 作为执行者运行局部任务并返回符合结果契约的 JSON。
 
-## Install from Clone
+## Installation
 
-Requirements: Node.js 20+, Claude Code CLI installed and authenticated, an MCP-capable client (Codex).
+New users should install both parts:
+
+- the **MCP server command**, so Codex can call `subagent_run_task`,
+  `subagent_run_many`, `subagent_status`, and `subagent_cancel`;
+- the **orchestrator Skill**, so Codex knows when to create a `todoList`, when
+  work can run in parallel, and when to add the two read-only review agents.
+
+Requirements: Node.js 20+, Claude Code CLI installed and authenticated
+(`claude` works in a terminal), and an MCP-capable Codex client.
+
+新用户建议同时安装两部分：MCP Server 命令负责执行子 agent，orchestrator Skill
+负责让 Codex 自动遵守 `todoList`、并行分析、双 review 与总控整合流程。
+
+### 1. Clone and verify
 
 ```bash
 git clone https://github.com/Bohaohao/subagent-control-protocol.git
@@ -52,16 +65,17 @@ npm run check      # syntax-check all sources and scripts
 npm run smoke:mcp  # exercise the MCP server end-to-end
 ```
 
-Run the server locally:
+You can run the server locally for a quick check:
 
 ```bash
 npm start
 # or: node ./bin/subagent-control-protocol.mjs
 ```
 
-## Global Codex MCP Config
+### 2. Register the global MCP command
 
-Link the package so it is callable by name, then register it globally.
+This repository is not published to npm yet. Link it from the cloned checkout so
+`subagent-control-protocol` is callable by name.
 
 ```bash
 cd /path/to/subagent-control-protocol
@@ -69,10 +83,29 @@ npm install
 npm link
 ```
 
-Add this to `~/.codex/config.toml`:
+### 3. Add the Codex MCP config
+
+Add this to `~/.codex/config.toml`.
+
+Windows:
 
 ```toml
 [mcp_servers.subagent-control-protocol]
+type = "stdio"
+command = "cmd"
+args = ["/c", "subagent-control-protocol"]
+startup_timeout_sec = 120
+tool_timeout_sec = 1200
+
+[mcp_servers.subagent-control-protocol.env]
+CLAUDE_BIN = "claude"
+```
+
+macOS / Linux:
+
+```toml
+[mcp_servers.subagent-control-protocol]
+type = "stdio"
 command = "subagent-control-protocol"
 args = []
 startup_timeout_sec = 120
@@ -82,7 +115,41 @@ tool_timeout_sec = 1200
 CLAUDE_BIN = "claude"
 ```
 
-Restart Codex after editing global MCP config. In a session, run `/mcp` or start a new thread to confirm the server is available. If Claude launches via `claude.cmd` on Windows, SCP tries to resolve the underlying `claude.exe` to avoid subprocess and quoting issues; you can also set `CLAUDE_BIN` explicitly.
+If Claude is not on `PATH`, set `CLAUDE_BIN` to the absolute path of the
+Claude Code CLI executable.
+
+### 4. Install the orchestrator Skill
+
+Copy the Skill into your global Codex skills directory.
+
+Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\.codex\skills\subagent-orchestrator"
+Copy-Item -Recurse -Force ".\skills\subagent-orchestrator\*" "$HOME\.codex\skills\subagent-orchestrator\"
+```
+
+macOS / Linux:
+
+```bash
+mkdir -p ~/.codex/skills/subagent-orchestrator
+cp -R ./skills/subagent-orchestrator/. ~/.codex/skills/subagent-orchestrator/
+```
+
+Restart Codex, or start a new Codex thread, after installing the MCP config and
+Skill. In a session, run `/mcp` to confirm the server is available.
+
+### Updating an existing install
+
+```bash
+cd /path/to/subagent-control-protocol
+git pull
+npm install
+npm link
+```
+
+Then copy `skills/subagent-orchestrator/` into `~/.codex/skills/` again and
+restart Codex or open a new thread.
 
 ## Plugin Bundle
 
@@ -93,6 +160,12 @@ This repo is installable as a Codex plugin. The bundle is made of three parts:
 - `skills/` — workflow Skills (e.g. `skills/subagent-orchestrator/SKILL.md`) that teach Codex *when* and *how* to delegate.
 
 Install the plugin into Codex and it registers the MCP server and the orchestrator Skill together, so delegation rules and the execution tools arrive as one unit.
+
+Use the plugin bundle when your Codex environment supports local plugin
+marketplaces. The repository itself is a plugin bundle, not a marketplace root;
+a marketplace is a parent index that points at plugin bundles. If you install
+through a Codex plugin marketplace, you do not need the manual Skill copy step
+above.
 
 把仓库作为 Codex 插件安装时，三部分协同生效：`plugin.json` 是清单，`.mcp.json` 注册 MCP Server，`skills/` 提供委派时机与方式的工作流规则。安装后执行工具与委派规则一同就位。
 

@@ -1,19 +1,19 @@
 # Subagent Control Protocol
 
-**Subagent Control Protocol (SCP)** is an installable MCP server that lets Codex act as the controller and delegate bounded work to Claude Code CLI subagents. Each subagent returns a structured, machine-readable result — files changed, commands run, verification evidence, risks, next steps, and token/cost evidence — so Codex can decide the next step instead of scraping terminal output.
+**Subagent Control Protocol (SCP)** is an installable Codex plugin for orchestrating Claude Code CLI subagents. It bundles two things that work together: an MCP runtime that exposes the execution tools, and an orchestrator Skill that teaches Codex when to split work, run tasks in parallel, add reviewers, and integrate results. Each subagent returns a structured, machine-readable result: files changed, commands run, verification evidence, risks, next steps, and token/cost evidence.
 
-**Subagent Control Protocol（SCP）** 是一个可直接安装的 MCP Server。它让 Codex 作为总控，把明确边界的任务分派给 Claude Code CLI 子 agent，并以结构化、可机读的形式收回结果（改了哪些文件、跑了哪些命令、验证证据、风险、下一步、token/成本证据）。这样总控可以根据结果决定下一步，而不必解析终端输出。
+**Subagent Control Protocol（SCP）** 是一个可直接安装的 Codex 插件，用来让 Codex 编排 Claude Code CLI 子 agent。它把两部分打包在一起：负责暴露执行工具的 MCP runtime，以及指导 Codex 何时拆分任务、何时并行、何时追加 review、如何整合结果的 orchestrator Skill。每个子 agent 都会返回结构化、可机读的结果：改了哪些文件、跑了哪些命令、验证证据、风险、下一步、token/成本证据。
 
 ## Why It Exists
 
-Codex is good at planning and integration, but a single long `claude -p` call gives back only free text. SCP fixes the "controller calls subagent" link:
+Codex is good at planning and integration, but a raw `claude -p` call is not a complete product experience for multi-agent work. SCP packages the workflow as a Codex plugin and fixes the "controller calls subagent" link:
 
 - Codex decides task decomposition, ownership, and acceptance criteria.
 - Claude Code CLI executes the bounded local task as a subagent.
-- The MCP server handles process lifecycle, concurrency, logging, structured output, and run archival.
+- The plugin's MCP runtime handles process lifecycle, concurrency, logging, structured output, and run archival.
 - Codex reads `run-summary.json` and the MCP `structuredContent`, then decides what to do next.
 
-SCP 的目标不是替代 Codex，而是补齐“总控调用子 agent”这条链路：单次长 `claude -p` 调用只会返回自由文本，而 SCP 让每次子 agent 调用都产出可追踪、可复盘的结构化结果。
+SCP 的目标不是替代 Codex，而是把“总控调用子 agent”这条链路沉淀成可安装的 Codex 插件：既有执行工具，也有编排规约；每次子 agent 调用都会产出可追踪、可复盘的结构化结果。
 
 ## Architecture
 
@@ -21,10 +21,13 @@ SCP 的目标不是替代 Codex，而是补齐“总控调用子 agent”这条�
 Codex (controller)
    │  decides decomposition, ownership, acceptance, integration
    ▼
-Skill layer  (skills/subagent-orchestrator/SKILL.md)
+SCP Codex plugin
+   │  installs the Skill workflow layer and MCP runtime together
+   ▼
+Skill workflow layer  (skills/subagent-orchestrator/SKILL.md)
    │  workflow rules: when to delegate, read-only vs implement, non-overlap
    ▼
-MCP layer  (src/server.mjs — processes & tools)
+MCP runtime layer  (src/server.mjs - processes & tools)
    │  process lifecycle, concurrency, logging, structured output
    ▼
 Claude Code CLI  (executor — `claude -p`)
@@ -34,47 +37,85 @@ Run artifacts  (.subagent-runs/<ts>/...)
 ```
 
 - **Codex controller** — decomposes work, dispatches tasks, reads results, integrates and ships.
+- **SCP Codex plugin** — the installable product: marketplace metadata, plugin manifest, Skill, MCP registration, bundled runtime, and update bootstrap.
 - **Skill workflow layer** — governs *when* and *how* to delegate: read-only review, non-overlapping implementation, verification, single-vs-many delegation.
-- **MCP process/tool layer** — manages Claude child processes, bounded concurrency, timeouts, cancellation, and structured output. Exposes four tools.
+- **MCP runtime/tool layer** — the plugin's execution layer. It manages Claude child processes, bounded concurrency, timeouts, cancellation, and structured output. Exposes four tools.
 - **Claude Code CLI executor** — runs each bounded task and returns JSON matching the result contract.
 
-四层分工：Codex 总控负责拆分与集成；Skill 层定义何时/如何委派；MCP 层负责进程、并发、超时与结构化输出；Claude Code CLI 作为执行者运行局部任务并返回符合结果契约的 JSON。
+分层关系：Codex 总控负责拆分与集成；SCP 作为 Codex 插件被安装；插件里的 Skill 层定义何时/如何委派；插件里的 MCP runtime 负责进程、并发、超时与结构化输出；Claude Code CLI 作为执行者运行局部任务并返回符合结果契约的 JSON。
 
 ## Installation
 
-New users should install both parts:
+SCP ships as a single Codex plugin bundle that installs the orchestrator Skill
+and the MCP runtime together. Two install paths are supported:
 
-- the **MCP server command**, so Codex can call `subagent_run_task`,
+- **Recommended — Codex plugin marketplace.** When your Codex environment
+  supports plugin marketplaces, install from this repo and the execution tools
+  plus the orchestrator Skill arrive as one unit. No manual Skill copy step is
+  needed.
+- **Fallback — manual MCP + Skill install.** For environments without plugin
+  marketplace support, register the MCP command and copy the Skill by hand.
+
+Either way the installed plugin gives Codex:
+
+- the **execution tool runtime**, so Codex can call `subagent_run_task`,
   `subagent_run_many`, `subagent_status`, and `subagent_cancel`;
 - the **orchestrator Skill**, so Codex knows when to create a `todoList`, when
   work can run in parallel, and when to add the two read-only review agents.
 
-Requirements: Node.js 20+, Claude Code CLI installed and authenticated
-(`claude` works in a terminal), and an MCP-capable Codex client.
+### Prerequisites
 
-新用户建议同时安装两部分：MCP Server 命令负责执行子 agent，orchestrator Skill
-负责让 Codex 自动遵守 `todoList`、并行分析、双 review 与总控整合流程。
+- **Node.js 20+** (`node -v`).
+- **Claude Code CLI** installed and authenticated — `claude` runs in a terminal.
+- **A MCP-capable Codex client.**
+- **Network access** for marketplace/bootstrap runtime self-update (see
+  [Update model](#update-model)). Self-update can be disabled with
+  `SCP_DISABLE_AUTO_UPDATE=1` for air-gapped setups. Manual installs update with
+  `git pull` instead.
 
-### 1. Clone and verify
+新用户安装插件后即同时获得两部分：执行工具 runtime 负责运行子 agent，orchestrator Skill
+负责让 Codex 自动遵守 `todoList`、并行分析、双 review 与总控整合流程。推荐走 Codex
+插件市场安装；不支持市场时退回手动安装。
+
+### Install via Codex plugin marketplace (recommended)
+
+Add this repository as a plugin marketplace source, then install/enable the
+plugin. Codex marketplace commands evolve between releases; the forms below match
+the documented marketplace behavior — if your CLI differs, fall back to the
+manual path.
+
+```bash
+# Add this repo as a marketplace source (owner/repo, optionally pinned to a ref)
+codex plugin marketplace add Bohaohao/subagent-control-protocol
+# or pin to a branch/tag:
+codex plugin marketplace add Bohaohao/subagent-control-protocol --ref main
+```
+
+Then install/enable the plugin. Depending on your Codex build, do this either by
+opening the `/plugins` view inside a Codex session, or by using the Codex app
+plugin directory. The marketplace metadata may be shown during install. Restart
+Codex (or start a new thread) once enabled.
+
+After install, run `/mcp` in a session to confirm the plugin's
+`subagent-control-protocol` runtime is available.
+
+### Manual installation (fallback)
+
+Use this when your Codex build has no plugin marketplace support.
+
+#### 1. Clone and verify
 
 ```bash
 git clone https://github.com/Bohaohao/subagent-control-protocol.git
 cd subagent-control-protocol
 npm install
 npm run check      # syntax-check all sources and scripts
-npm run smoke:mcp  # exercise the MCP server end-to-end
+npm run smoke:mcp  # exercise the plugin runtime end-to-end
 ```
 
-You can run the server locally for a quick check:
+#### 2. Register the global MCP command
 
-```bash
-npm start
-# or: node ./bin/subagent-control-protocol.mjs
-```
-
-### 2. Register the global MCP command
-
-This repository is not published to npm yet. Link it from the cloned checkout so
+This repository is not published to npm. Link it from the cloned checkout so
 `subagent-control-protocol` is callable by name.
 
 ```bash
@@ -83,7 +124,7 @@ npm install
 npm link
 ```
 
-### 3. Add the Codex MCP config
+#### 3. Add the Codex MCP config
 
 Add this to `~/.codex/config.toml`.
 
@@ -118,7 +159,7 @@ CLAUDE_BIN = "claude"
 If Claude is not on `PATH`, set `CLAUDE_BIN` to the absolute path of the
 Claude Code CLI executable.
 
-### 4. Install the orchestrator Skill
+#### 4. Install the orchestrator Skill
 
 Copy the Skill into your global Codex skills directory.
 
@@ -136,10 +177,62 @@ mkdir -p ~/.codex/skills/subagent-orchestrator
 cp -R ./skills/subagent-orchestrator/. ~/.codex/skills/subagent-orchestrator/
 ```
 
-Restart Codex, or start a new Codex thread, after installing the MCP config and
-Skill. In a session, run `/mcp` to confirm the server is available.
+Restart Codex, or start a new Codex thread, after installing the manual MCP
+config and Skill. In a session, run `/mcp` to confirm the plugin runtime is
+available.
+
+## Update model
+
+There are two independent update channels — keep them separate:
+
+- **Runtime self-update (plugin MCP runtime).** For marketplace installs that launch
+  through `dist/bootstrap.mjs`, Codex restart starts the bootstrap launcher. It
+  checks an update manifest and runs a newer verified runtime build from the
+  local cache before the execution runtime starts. This updates the plugin's MCP
+  process/tool layer (`src/`) without touching the marketplace plugin metadata.
+  Self-update requires network access; disable it with
+  `SCP_DISABLE_AUTO_UPDATE=1`.
+- **Skill / plugin metadata updates.** The orchestrator Skill
+  (`skills/subagent-orchestrator/SKILL.md`) and plugin manifest
+  (`.codex-plugin/plugin.json`) are part of the marketplace bundle. They are
+  refreshed only when the marketplace is refreshed / the plugin is upgraded —
+  either manually or automatically if your Codex build auto-refreshes
+  marketplaces. The runtime self-update does **not** update Skill or plugin
+  metadata.
+
+In short: marketplace/bootstrap installs can pick up runtime-only updates on
+Codex restart. Skill and plugin metadata follow the marketplace upgrade cycle.
+Manual installs do not use the bootstrap path; update them with `git pull`,
+`npm link`, and a fresh Skill copy.
+
+更新模型分两条独立通道：运行时自更新在 Codex 重启时由 `dist/bootstrap.mjs` 检查清单
+并应用新的插件 MCP runtime（仅更新 `src/` 进程/工具层，不触碰市场插件元数据）；Skill 与
+插件元数据则随市场刷新/升级更新，除非 Codex 自动刷新市场，否则需要手动升级。
+
+### Environment controls
+
+| Variable | Purpose |
+| --- | --- |
+| `SCP_DISABLE_AUTO_UPDATE` | Set to `1` (or any truthy value) to disable runtime self-update at startup for marketplace/bootstrap installs. Use for air-gapped or pinned environments. |
+| `SCP_UPDATE_MANIFEST_URL` | Override the manifest URL the bootstrap launcher fetches to check for runtime updates. Defaults to the manifest published with the release. |
+| `SCP_UPDATE_CACHE_DIR` | Directory used to store downloaded runtime builds. Override to relocate the cache (e.g. onto writable storage). |
+| `CLAUDE_BIN` | Path to the Claude Code CLI executable used to spawn subagents. Set in the plugin MCP env block if `claude` is not on `PATH`. |
 
 ### Updating an existing install
+
+Marketplace install:
+
+```bash
+# Re-run this to refresh the marketplace source and upgrade the plugin
+codex plugin marketplace add Bohaohao/subagent-control-protocol --ref main
+# then upgrade/enable via /plugins or your Codex app plugin directory
+```
+
+The plugin MCP runtime will self-update on the next Codex restart via
+`dist/bootstrap.mjs`; Skill/plugin metadata updates land with the marketplace
+upgrade.
+
+Manual install:
 
 ```bash
 cd /path/to/subagent-control-protocol
@@ -153,27 +246,28 @@ restart Codex or open a new thread.
 
 ## Plugin Bundle
 
-This repo is installable as a Codex plugin. The bundle is made of three parts:
+This repo is installable as a Codex plugin. The bundle is made of five parts:
 
+- `.agents/plugins/marketplace.json` — repo marketplace index that exposes this plugin bundle.
 - `.codex-plugin/plugin.json` — plugin manifest: name, version, description, capabilities, default prompts.
-- `.mcp.json` — MCP server registration (command + env) referenced by the manifest's `mcpServers`.
+- `.mcp.json` — plugin MCP runtime registration (command + env) referenced by the manifest's `mcpServers`.
+- `dist/` — bundled MCP runtime (`server.mjs`), startup bootstrap (`bootstrap.mjs`), and update manifest (`latest.json`).
 - `skills/` — workflow Skills (e.g. `skills/subagent-orchestrator/SKILL.md`) that teach Codex *when* and *how* to delegate.
 
-Install the plugin into Codex and it registers the MCP server and the orchestrator Skill together, so delegation rules and the execution tools arrive as one unit.
+Install the plugin into Codex and it activates the MCP runtime and the orchestrator Skill together, so delegation rules and the execution tools arrive as one unit. See [Installation](#installation) for the marketplace flow and [Update model](#update-model) for how the bundled runtime self-updates.
 
-Use the plugin bundle when your Codex environment supports local plugin
-marketplaces. The repository itself is a plugin bundle, not a marketplace root;
-a marketplace is a parent index that points at plugin bundles. If you install
-through a Codex plugin marketplace, you do not need the manual Skill copy step
-above.
+The repository root is both the repo marketplace root and the plugin bundle:
+`.agents/plugins/marketplace.json` exposes `source.path: "./"`, which points
+back at this bundle. If you install through a Codex plugin marketplace, you do
+not need the manual Skill copy step.
 
-把仓库作为 Codex 插件安装时，三部分协同生效：`plugin.json` 是清单，`.mcp.json` 注册 MCP Server，`skills/` 提供委派时机与方式的工作流规则。安装后执行工具与委派规则一同就位。
+把仓库作为 Codex 插件安装时，这些部分协同生效：`plugin.json` 是插件清单，`.mcp.json` 注册插件内置 MCP runtime，`dist/` 提供打包后的运行时与 bootstrap，`skills/` 提供委派时机与方式的工作流规则。安装后执行工具与委派规则一同就位。
 
 ## Minimal Prompt & Controller Workflow
 
-In normal use you do **not** need to specify concurrency or detailed MCP parameters in your prompt. Give Codex the task; the controller (Codex + the orchestrator Skill) decides decomposition, concurrency, and dispatch, while the MCP layer handles process lifecycle and structured output. The user-facing prompt can be minimal.
+In normal use you do **not** need to specify concurrency or detailed MCP parameters in your prompt. Give Codex the task; the controller (Codex + the orchestrator Skill) decides decomposition, concurrency, and dispatch, while the plugin MCP runtime handles process lifecycle and structured output. The user-facing prompt can be minimal.
 
-正常使用时，你**无需**在 prompt 中指定并发或详细的 MCP 参数。给出任务即可：总控（Codex + orchestrator Skill）决定拆分、并发与派发，MCP 层负责进程生命周期与结构化输出。面向用户的 prompt 可以非常精简。
+正常使用时，你**无需**在 prompt 中指定并发或详细的 MCP 参数。给出任务即可：总控（Codex + orchestrator Skill）决定拆分、并发与派发，插件内置 MCP runtime 负责进程生命周期与结构化输出。面向用户的 prompt 可以非常精简。
 
 ### Minimal prompt (recommended)
 
@@ -212,14 +306,14 @@ In plain language: Codex plans the work, runs independent implementers in parall
 
 收到这类精简 prompt 后，Codex 作为总控自行驱动完整流程：建立 `todoList` → 区分可并行任务 → 按 `todoList` 派发子 agent → 增加“软件工程评审”与“真实用户视角评审”子 agent → 整合评审结论 → 汇总报告并做最终决策。合并、发布、推送等决策始终由总控保留，不下放给子 agent。
 
-### Controller decision vs MCP execution layer
+### Controller decision vs runtime execution layer
 
 Two distinct layers — keep them separate:
 
 - **Controller decision layer (Codex + Skill)** — owns *what* to do: the `todoList`, parallelization classification, dispatch order, agent prompts, file ownership, and the final accept/integrate/ship decision. This is where concurrency and routing are decided; the user does not state them.
-- **MCP execution layer (`src/server.mjs`)** — owns *how* it runs: Claude child-process lifecycle, bounded concurrency enforcement, timeouts, cancellation, logging, structured output, and run archival. It exposes the four tools but does not decide decomposition.
+- **Plugin MCP runtime (`src/server.mjs`)** — owns *how* it runs: Claude child-process lifecycle, bounded concurrency enforcement, timeouts, cancellation, logging, structured output, and run archival. It exposes the four tools but does not decide decomposition.
 
-两层要分开看：决策层（总控 + Skill）负责“做什么”——`todoList`、可并行分类、派发顺序、prompt、文件归属与最终决策，并发与路由在此决定，用户无需指定；执行层（MCP Server）负责“怎么跑”——进程生命周期、有界并发、超时、取消、日志、结构化输出与归档，只暴露工具，不参与拆分。
+两层要分开看：决策层（总控 + Skill）负责“做什么”——`todoList`、可并行分类、派发顺序、prompt、文件归属与最终决策，并发与路由在此决定，用户无需指定；插件内置 MCP runtime 负责“怎么跑”——进程生命周期、有界并发、超时、取消、日志、结构化输出与归档，只暴露工具，不参与拆分。
 
 ## Usage — Prompt Examples
 
@@ -314,30 +408,41 @@ Read order for controllers:
 
 ```bash
 npm run check        # node --check on bin, src, and scripts
-npm run smoke:mcp    # end-to-end MCP server smoke test
+npm run build        # bundle dist/server.mjs and write dist/latest.json
+npm run build:check  # syntax-check dist artifacts
+npm run verify:bundle
+npm run verify:marketplace
+npm run smoke:mcp    # end-to-end plugin runtime smoke test
 npm run text:check   # text-health report (encoding/mojibake scan)
 npm run agent:run -- --plan ./examples/plans/runner-smoke.plan.json --dry-run
 ```
 
-Run `npm run check` and `npm run smoke:mcp` after any source change. `npm run text:check` writes `./.agent-checks/text-health-report.json` and flags encoding problems.
+Run `npm run check`, `npm run build`, `npm run verify:bundle`,
+`npm run verify:marketplace`, and `npm run smoke:mcp` after source or packaging
+changes. `npm run text:check` writes `./.agent-checks/text-health-report.json`
+and flags encoding problems.
 
 ## Repository Layout
 
 ```text
 .
-├── bin/                      # package bin entrypoint
-├── .codex-plugin/plugin.json # Codex plugin manifest
-├── skills/                   # workflow Skills (orchestration rules)
-├── src/
-│   ├── core/                 # scheduler, claude-runner, result normalizer, process tree
-│   └── server.mjs            # MCP server + tool definitions
-├── schemas/                  # agent-result.schema.json, task-plan.schema.json
-├── scripts/                  # run-claude-agents, smoke-mcp, check-text-health
-├── examples/                 # mcp-config, plans, prompts
-├── docs/                     # protocol + roadmap docs
-└── package.json
+|-- .agents/plugins/marketplace.json
+|-- .codex-plugin/plugin.json
+|-- .mcp.json
+|-- build.mjs
+|-- bin/                      # package bin entrypoint
+|-- dist/                     # bundled runtime, bootstrap, update manifest
+|-- skills/                   # workflow Skills (orchestration rules)
+|-- src/
+|   |-- bootstrap.mjs         # dependency-free runtime update launcher source
+|   |-- core/                 # scheduler, claude-runner, result normalizer, process tree
+|   `-- server.mjs            # plugin MCP runtime + tool definitions
+|-- schemas/                  # agent-result.schema.json, task-plan.schema.json
+|-- scripts/                  # runner, smoke, text, bundle/marketplace verifiers
+|-- examples/                 # mcp-config, plans, prompts
+|-- docs/                     # protocol, release, verification docs
+`-- package.json
 ```
 
 ## License
-
 MIT © Bohaohao

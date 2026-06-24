@@ -3,7 +3,7 @@
     "subagent-control-protocol": {
       "command": "node",
       "args": [
-        "./bin/subagent-control-protocol.mjs"
+        "./dist/bootstrap.mjs"
       ],
       "cwd": ".",
       "startup_timeout_sec": 120,

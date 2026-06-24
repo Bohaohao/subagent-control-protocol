@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Installable MCP server for Codex-led Claude Code subagents with structured execution results.",
+  "description": "Codex plugin for orchestrating Claude Code subagents with a bundled MCP runtime and structured execution results.",
   "keywords": [
     "codex",
     "claude-code",
@@ -25,13 +25,16 @@
   "files": [
     "bin",
     "src",
+    "dist",
     "schemas",
     "scripts",
     "docs",
     "examples",
     "skills",
+    ".agents",
     ".codex-plugin",
     ".mcp.json",
+    "build.mjs",
     "README.md"
   ],
   "bin": {
@@ -42,11 +45,18 @@
     "agent:run": "node scripts/run-claude-agents.mjs",
     "smoke:mcp": "node scripts/smoke-mcp.mjs",
     "text:check": "node scripts/check-text-health.mjs --root . --out ./.agent-checks/text-health-report.json",
-    "check": "node --check ./bin/subagent-control-protocol.mjs && node --check ./src/server.mjs && node --check ./src/core/claude-runner.mjs && node --check ./src/core/json.mjs && node --check ./src/core/scheduler.mjs && node --check ./src/core/result-normalizer.mjs && node --check ./src/core/process-tree.mjs && node --check ./scripts/run-claude-agents.mjs && node --check ./scripts/smoke-mcp.mjs && node --check ./scripts/check-text-health.mjs"
+    "build": "node build.mjs",
+    "build:check": "node --check ./dist/server.mjs && node --check ./dist/bootstrap.mjs && node -e \"JSON.parse(require('fs').readFileSync('./dist/latest.json','utf8'))\"",
+    "verify:bundle": "node scripts/verify-bundle-runtime.mjs",
+    "verify:marketplace": "node scripts/verify-marketplace-plugin.mjs",
+    "check": "node --check ./build.mjs && node --check ./bin/subagent-control-protocol.mjs && node --check ./src/server.mjs && node --check ./src/bootstrap.mjs && node --check ./src/core/claude-runner.mjs && node --check ./src/core/json.mjs && node --check ./src/core/scheduler.mjs && node --check ./src/core/result-normalizer.mjs && node --check ./src/core/process-tree.mjs && node --check ./scripts/run-claude-agents.mjs && node --check ./scripts/smoke-mcp.mjs && node --check ./scripts/check-text-health.mjs && node --check ./scripts/verify-bundle-runtime.mjs && node --check ./scripts/verify-marketplace-plugin.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   },
   "engines": {
     "node": ">=20"

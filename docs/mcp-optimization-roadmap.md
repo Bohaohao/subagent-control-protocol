@@ -1,8 +1,8 @@
 # MCP optimization roadmap
 
-Subagent Control Protocol is now a first-class MCP server. This document tracks
-the remaining improvements that would make Codex-to-Claude delegation more
-observable, cancellable, and policy-aware.
+Subagent Control Protocol is now a first-class Codex plugin with a bundled MCP
+runtime. This document tracks the remaining runtime improvements that would make
+Codex-to-Claude delegation more observable, cancellable, and policy-aware.
 
 ## Current tools
 

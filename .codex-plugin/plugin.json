@@ -1,7 +1,7 @@
 {
   "name": "subagent-control-protocol",
   "version": "0.3.0",
-  "description": "Codex plugin exposing an MCP server for orchestrating structured, verifiable Claude Code subagents.",
+  "description": "Codex plugin for orchestrating structured, verifiable Claude Code subagents through a bundled MCP runtime.",
   "author": {
     "name": "Bohaohao"
   },
@@ -13,7 +13,7 @@
   "interface": {
     "displayName": "Subagent Control Protocol",
     "shortDescription": "Orchestrate Codex-led Claude Code subagents with structured, verifiable execution results.",
-    "longDescription": "The Subagent Control Protocol plugin registers an MCP server that lets Codex spawn and supervise Claude Code subagents. Each subagent returns a structured result describing files changed, commands run, verification evidence, risks, and next steps, enabling deterministic multi-agent orchestration with clear boundary controls.",
+    "longDescription": "The Subagent Control Protocol plugin lets Codex spawn and supervise Claude Code subagents through a bundled MCP runtime. Each subagent returns a structured result describing files changed, commands run, verification evidence, risks, and next steps, enabling deterministic multi-agent orchestration with clear boundary controls. Published as a repo marketplace bundle: the repository root is the plugin bundle, and the runtime launches through ./dist/bootstrap.mjs. The bootstrap can check an update manifest at startup, run the newest verified MCP runtime from a local cache, and fall back to the bundled runtime when offline or pinned.",
     "developerName": "Bohaohao",
     "category": "Productivity",
     "capabilities": [
@@ -23,7 +23,8 @@
     "defaultPrompt": [
       "Run a Claude Code subagent that implements the assigned task and returns a structured JSON result.",
       "Dispatch parallel Claude Code subagents with clear boundaries and collect their structured results.",
-      "Spawn a single Claude Code subagent to verify changes and report evidence, risks, and next steps."
+      "Spawn a single Claude Code subagent to verify changes and report evidence, risks, and next steps.",
+      "Install or update this plugin from the repo marketplace; the bundled bootstrap can check for a verified MCP runtime update at startup before falling back to ./dist/server.mjs."
     ]
   }
 }

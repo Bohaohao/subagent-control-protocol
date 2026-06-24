@@ -15,7 +15,6 @@ Input:
 - `prompt`
 - `model`
 - `timeoutMs`
-- `maxBudgetUsd`
 - `permissionMode`
 - `allowedTools`
 

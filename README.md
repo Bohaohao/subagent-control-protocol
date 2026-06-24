@@ -1,73 +1,75 @@
 # Subagent Control Protocol
 
-**Subagent Control Protocol (SCP)** is an installable MCP server that lets Codex act as the controller and delegate bounded work to Claude Code CLI subagents.
+**Subagent Control Protocol (SCP)** is an installable MCP server that lets Codex act as the controller and delegate bounded work to Claude Code CLI subagents. Each subagent returns a structured, machine-readable result — files changed, commands run, verification evidence, risks, next steps, and token/cost evidence — so Codex can decide the next step instead of scraping terminal output.
 
-**Subagent Control Protocol（SCP）** 是一个可直接安装和配置的 MCP Server。它让 Codex 作为总控，把明确边界的任务分派给 Claude Code CLI 子 agent，并把执行结果以结构化形式收回。
+**Subagent Control Protocol（SCP）** 是一个可直接安装的 MCP Server。它让 Codex 作为总控，把明确边界的任务分派给 Claude Code CLI 子 agent，并以结构化、可机读的形式收回结果（改了哪些文件、跑了哪些命令、验证证据、风险、下一步、token/成本证据）。这样总控可以根据结果决定下一步，而不必解析终端输出。
 
-## What It Does
+## Why It Exists
 
-SCP turns `claude -p` calls into controller-readable task runs:
+Codex is good at planning and integration, but a single long `claude -p` call gives back only free text. SCP fixes the "controller calls subagent" link:
 
-- run one Claude subagent task;
-- run many dependency-aware tasks with bounded concurrency;
-- capture prompts, stdout, stderr, raw Claude JSON, normalized results, and run summaries;
-- kill timed-out Windows or Unix process trees;
-- expose status and best-effort cancellation through MCP tools;
-- keep generated run artifacts out of git.
+- Codex decides task decomposition, ownership, and acceptance criteria.
+- Claude Code CLI executes the bounded local task as a subagent.
+- The MCP server handles process lifecycle, concurrency, logging, structured output, and run archival.
+- Codex reads `run-summary.json` and the MCP `structuredContent`, then decides what to do next.
 
-SCP 的目标不是替代 Codex，而是补齐“总控调用子 agent”这条链路：
+SCP 的目标不是替代 Codex，而是补齐“总控调用子 agent”这条链路：单次长 `claude -p` 调用只会返回自由文本，而 SCP 让每次子 agent 调用都产出可追踪、可复盘的结构化结果。
 
-- Codex 决定任务拆分和验收标准；
-- Claude Code CLI 作为子 agent 执行局部任务；
-- MCP Server 负责进程、并发、日志、结构化输出和结果归档；
-- Codex 读取 `run-summary.json` 与 MCP `structuredContent`，再决定下一步。
+## Architecture
 
-## Install
+```text
+Codex (controller)
+   │  decides decomposition, ownership, acceptance, integration
+   ▼
+Skill layer  (skills/subagent-orchestrator/SKILL.md)
+   │  workflow rules: when to delegate, read-only vs implement, non-overlap
+   ▼
+MCP layer  (src/server.mjs — processes & tools)
+   │  process lifecycle, concurrency, logging, structured output
+   ▼
+Claude Code CLI  (executor — `claude -p`)
+   │  runs the bounded task, returns agent-result JSON
+   ▼
+Run artifacts  (.subagent-runs/<ts>/...)
+```
 
-Requirements:
+- **Codex controller** — decomposes work, dispatches tasks, reads results, integrates and ships.
+- **Skill workflow layer** — governs *when* and *how* to delegate: read-only review, non-overlapping implementation, verification, single-vs-many delegation.
+- **MCP process/tool layer** — manages Claude child processes, bounded concurrency, timeouts, cancellation, and structured output. Exposes four tools.
+- **Claude Code CLI executor** — runs each bounded task and returns JSON matching the result contract.
 
-- Node.js 20+
-- Claude Code CLI installed and authenticated
-- A Codex or MCP-capable client
+四层分工：Codex 总控负责拆分与集成；Skill 层定义何时/如何委派；MCP 层负责进程、并发、超时与结构化输出；Claude Code CLI 作为执行者运行局部任务并返回符合结果契约的 JSON。
 
-Clone and install:
+## Install from Clone
 
-```powershell
+Requirements: Node.js 20+, Claude Code CLI installed and authenticated, an MCP-capable client (Codex).
+
+```bash
 git clone https://github.com/Bohaohao/subagent-control-protocol.git
 cd subagent-control-protocol
 npm install
-npm run check
-npm run smoke:mcp
+npm run check      # syntax-check all sources and scripts
+npm run smoke:mcp  # exercise the MCP server end-to-end
 ```
 
-Run as a local MCP server:
+Run the server locally:
 
-```powershell
+```bash
 npm start
+# or: node ./bin/subagent-control-protocol.mjs
 ```
 
-Or run the package bin directly. The package is private and not distributed via the npm registry:
+## Global Codex MCP Config
 
-```powershell
-node .\bin\subagent-control-protocol.mjs
-```
+Link the package so it is callable by name, then register it globally.
 
-To invoke it by name from anywhere, link it locally first:
-
-```powershell
-npm link
-subagent-control-protocol
-```
-
-Install it into Codex globally:
-
-```powershell
-cd D:\path\to\subagent-control-protocol
+```bash
+cd /path/to/subagent-control-protocol
 npm install
 npm link
 ```
 
-Then add this to the global Codex config at `~/.codex/config.toml`:
+Add this to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.subagent-control-protocol]
@@ -80,124 +82,68 @@ tool_timeout_sec = 1200
 CLAUDE_BIN = "claude"
 ```
 
-Restart Codex after changing global MCP config. In a Codex session, ask for `/mcp` or start a new thread to confirm the server is available.
+Restart Codex after editing global MCP config. In a session, run `/mcp` or start a new thread to confirm the server is available. If Claude launches via `claude.cmd` on Windows, SCP tries to resolve the underlying `claude.exe` to avoid subprocess and quoting issues; you can also set `CLAUDE_BIN` explicitly.
 
-## MCP Configuration
+## Plugin Bundle
 
-Point your MCP client at this server. For local development, run the server
-entrypoint directly with an absolute path to your cloned checkout:
+This repo is installable as a Codex plugin. The bundle is made of three parts:
 
-```json
-{
-  "mcpServers": {
-    "subagent-control-protocol": {
-      "command": "node",
-      "args": ["/absolute/path/to/subagent-control-protocol/src/server.mjs"],
-      "env": {
-        "CLAUDE_BIN": "claude"
-      }
-    }
-  }
-}
-```
+- `.codex-plugin/plugin.json` — plugin manifest: name, version, description, capabilities, default prompts.
+- `.mcp.json` — MCP server registration (command + env) referenced by the manifest's `mcpServers`.
+- `skills/` — workflow Skills (e.g. `skills/subagent-orchestrator/SKILL.md`) that teach Codex *when* and *how* to delegate.
 
-If you linked the package (`npm link`) or installed it globally from a checkout, use the bin instead:
+Install the plugin into Codex and it registers the MCP server and the orchestrator Skill together, so delegation rules and the execution tools arrive as one unit.
 
-```json
-{
-  "mcpServers": {
-    "subagent-control-protocol": {
-      "command": "subagent-control-protocol",
-      "args": [],
-      "env": {
-        "CLAUDE_BIN": "claude"
-      }
-    }
-  }
-}
-```
+把仓库作为 Codex 插件安装时，三部分协同生效：`plugin.json` 是清单，`.mcp.json` 注册 MCP Server，`skills/` 提供委派时机与方式的工作流规则。安装后执行工具与委派规则一同就位。
 
-如果 Claude 在 Windows 上通过 `claude.cmd` 启动，SCP 会尝试解析背后的真实 `claude.exe`，避免子进程和参数转义问题。也可以显式设置 `CLAUDE_BIN`。
+## Usage — Prompt Examples
+
+### Parallel read-only review (EN)
+
+> You are the controller. Delegate a parallel, read-only code review via `subagent_run_many` with `concurrency: 3` and `permissionMode: "default"`. Three reviewers — security, API regressions, test coverage — each read-only, no `dependsOn` between them. Do not edit files yourself unless a reviewer flags a critical blocker. After the run, read `run-summary.json` and each `tasks/<id>/result.json`, synthesize one report, and you (Codex) make the final accept/reject/revise decision. Cite `measuredUsageSummary`/`usage` for token-cost evidence.
+
+### 并行只读评审（中文）
+
+> 你是总控。通过 `subagent_run_many` 发起并行只读代码评审，`concurrency: 3`，`permissionMode: "default"`。三个评审子 agent 分别负责安全、API 回归、测试覆盖，互不依赖、互不编辑文件。除非有评审者标记关键阻塞，否则你不要亲自改文件。运行后读取 `run-summary.json` 与各 `tasks/<id>/result.json`，综合成一份报告，由你（Codex）做最终的接受/驳回/修订决策。token/成本证据引用 `measuredUsageSummary`/`usage`。
+
+### Non-overlapping implementation (EN)
+
+> You are the controller. Decompose the change into non-overlapping implementation slices and dispatch them in parallel via `subagent_run_many`. Each subagent gets an EXCLUSIVE file set — no two subagents may edit the same file. State each subagent's owned files in its prompt and forbid edits outside that set. Set `concurrency` to the number of implementers. After the run, cross-check `filesChanged` across results for collisions, run the full `npm run check` + `npm run smoke:mcp`, and route any fix to the single owning agent of the failing file. You make the final ship/hold decision.
+
+### 互不重叠的实现（中文）
+
+> 你是总控。把改动拆成互不重叠的实现切片，通过 `subagent_run_many` 并行派发。每个子 agent 拥有独占的文件集合——任何两个子 agent 不得编辑同一文件。在各自的 prompt 中声明拥有的文件，并禁止改动该集合之外的内容。`concurrency` 设为实现者数量。运行后交叉比对各结果的 `filesChanged` 检查冲突，运行完整的 `npm run check` 与 `npm run smoke:mcp`；若集成失败，把修复定向给失败文件的那个所有者。最终是否发布由你决定。
 
 ## MCP Tools
 
-`subagent_run_task`
+| Tool | Purpose |
+| --- | --- |
+| `subagent_run_task` | Run one bounded Claude subagent task; returns `{ runSummary, results, result }` where `result` is the single task. |
+| `subagent_run_many` | Run a dependency-aware plan with bounded concurrency; returns `{ runSummary, results }` in input order. Use for parallel review/verification or non-overlapping implementation. |
+| `subagent_status` | Read one `run-summary.json` (mode `single`) or list recent runs from an output dir (mode `list`); both include the active-process list. |
+| `subagent_cancel` | Best-effort cancellation for active Claude child processes in this server process. Requires `runId`. |
 
-Run one Claude Code subagent task and return a normalized result. Use this for a single review, implementation, research, or verification job.
-
-`subagent_run_many`
-
-Run multiple tasks with dependency control and bounded parallelism. Use this when the controller wants several read-only reviewers or verifiers to work in parallel.
-
-`subagent_status`
-
-Read one `run-summary.json`, or list recent run summaries from an output directory. This is how a controller can inspect prior runs without scraping terminal output.
-
-`subagent_cancel`
-
-Best-effort cancellation for active Claude child processes in the current MCP server process. It requires `runId`.
-
-## Task Plan Example
-
-```json
-{
-  "version": 1,
-  "workspace": "../my-project",
-  "outputDir": "../.subagent-runs",
-  "concurrency": 2,
-  "defaults": {
-    "model": "sonnet",
-    "effort": "low",
-    "timeoutMs": 300000,
-    "permissionMode": "default",
-    "tools": []
-  },
-  "tasks": [
-    {
-      "id": "review-api",
-      "title": "Review API changes",
-      "kind": "review",
-      "prompt": "Review the API layer for regressions. Do not edit files."
-    },
-    {
-      "id": "review-tests",
-      "title": "Review tests",
-      "kind": "review",
-      "prompt": "Review test coverage and identify missing high-value tests. Do not edit files."
-    },
-    {
-      "id": "summarize",
-      "title": "Summarize findings",
-      "kind": "verify",
-      "dependsOn": ["review-api", "review-tests"],
-      "prompt": "Summarize the completed review outputs as structured JSON."
-    }
-  ]
-}
-```
-
-Run the same core through CLI:
-
-```powershell
-node .\scripts\run-claude-agents.mjs --plan .\examples\plans\review-and-summarize.plan.json --concurrency 2 --dry-run
-```
+Every tool returns a shared envelope: `{ ok: true, ...payload }` on success, or `{ ok: false, error: { code, message, stack? } }` (with `isError: true`) on failure. All run tools include `runSummary` in `structuredContent`.
 
 ## Result Contract
 
 Every Claude subagent is asked to return JSON matching `schemas/agent-result.schema.json`:
 
-- `status`: `completed`, `partial`, `blocked`, or `failed`
-- `summary`: factual outcome
-- `filesChanged`: files changed and why
-- `commandsRun`: commands with pass/fail/skipped state
-- `verification`: checks and evidence
-- `risks`: remaining risks
-- `nextSteps`: concrete follow-up actions
-- `tokenUsageSummary`: Claude-authored note about whether exact token usage was visible
-- `metrics`: optional token and cost metrics
+- `status` — `completed` | `partial` | `blocked` | `failed`
+- `summary` — factual outcome
+- `filesChanged` — files changed and why
+- `commandsRun` — commands with pass/fail/skipped state
+- `verification` — checks and evidence
+- `risks` — remaining risks with severity
+- `nextSteps` — concrete follow-up actions
+- `tokenUsageSummary` — **required, always.** A Claude-authored note on whether exact token usage was visible; never fabricate exact counts.
+- `metrics` — optional token/cost numbers when visible.
 
-The runner also normalizes common variants such as `files_changed`, `verifications`, and `status: "passed"` into the official shape.
-The controller also records measured usage from the Claude CLI envelope as `usage` and `measuredUsageSummary` when available.
+The runner normalizes common variants (`files_changed`, `verifications`, `status: "passed"`) into the official shape. The controller also records measured usage from the Claude CLI envelope as `usage` and `measuredUsageSummary` when available — prefer these over the subagent's self-report for actual token/cost.
+
+Prefer MCP-measured numbers over the subagent's self-report: use `measuredUsageSummary`/`usage` as the source of truth, and `tokenUsageSummary` only as qualitative context.
+
+每个子 agent 必须返回符合 `schemas/agent-result.schema.json` 的 JSON，`tokenUsageSummary` 为必填项且不得编造确切 token 数。实际 token/成本以 MCP 从 Claude CLI 信封采集的 `usage`/`measuredUsageSummary` 为准，子 agent 自报仅作参考。
 
 ## Run Artifacts
 
@@ -218,70 +164,51 @@ Each run writes a timestamped directory:
         result.json
 ```
 
-AI controllers should prefer these files in order:
+Read order for controllers:
 
-1. `run-summary.json` for the whole run.
-2. `tasks/<id>/result.json` for one normalized task result.
-3. `tasks/<id>/raw-output.json` only when debugging Claude's original envelope.
-4. `stdout.txt` and `stderr.txt` only when process-level diagnosis is needed.
-
-AI 总控读取顺序建议：
-
-1. 先读 `run-summary.json` 判断总体是否完成。
-2. 再读 `tasks/<id>/result.json` 获取单个子任务的结构化结果。
-3. 只有调试 Claude 原始输出时才读 `raw-output.json`。
-4. 只有排查进程问题时才读 `stdout.txt` 和 `stderr.txt`。
-
-## Repository Layout
-
-```text
-.
-|-- bin/
-|   `-- subagent-control-protocol.mjs
-|-- docs/
-|   |-- mcp-optimization-roadmap.md
-|   `-- subagent-protocol.md
-|-- examples/
-|   |-- mcp-config/
-|   `-- plans/
-|-- schemas/
-|   |-- agent-result.schema.json
-|   `-- task-plan.schema.json
-|-- scripts/
-|   |-- check-text-health.mjs
-|   |-- run-claude-agents.mjs
-|   `-- smoke-mcp.mjs
-|-- src/
-|   |-- core/
-|   `-- server.mjs
-`-- package.json
-```
+1. `run-summary.json` — overall run status.
+2. `tasks/<id>/result.json` — one normalized task result.
+3. `tasks/<id>/raw-output.json` — only when debugging Claude's original envelope.
+4. `stdout.txt` / `stderr.txt` — only for process-level diagnosis.
 
 ## Safety Notes
 
 - Do not commit API keys, Claude tokens, browser profiles, or run logs.
 - Use private repositories when prompts may contain proprietary project context.
-- Keep implementation tasks single-writer unless file ownership is explicit.
-- Use parallelism first for planning, research, review, and verification.
-- Use `dryRun: true` when checking task decomposition or MCP wiring.
-- Treat `permissionMode: "bypassPermissions"` and `"auto"` as privileged modes; prefer isolated workspaces for delegated tasks.
+- Parallelize read-only work (review, research, verification) first.
+- Keep implementation single-writer with explicit, non-overlapping file ownership; never let two subagents edit the same file concurrently.
+- Use `dryRun: true` to validate task decomposition or MCP wiring before a real run.
+- Treat `permissionMode: "bypassPermissions"` and `"auto"` as privileged modes; prefer isolated workspaces for delegated tasks and never use them on shared trees.
+- Never delegate merge, release, or push decisions to a subagent — Codex stays the final integrator.
 
-## 中文速览
+## Development Checks
 
-SCP 是“Codex 总控 + Claude 子 agent”的 MCP 化执行层。它解决的核心问题是：总控不仅能发起 Claude Code CLI 任务，还能拿回可机读、可追踪、可复盘的结果。
-
-常见用法：
-
-- 让多个 Claude 子 agent 并行做 review、research、verify；
-- 让实现任务保持单写者，避免并发改同一批文件；
-- 对每次子 agent 调用留下 prompt、日志、原始输出和归一化结果；
-- 让 Codex 根据 `structuredContent` 或 `run-summary.json` 做下一步决策。
-
-最小验证：
-
-```powershell
-npm install
-npm run check
-npm run smoke:mcp
-node .\scripts\run-claude-agents.mjs --plan .\examples\plans\runner-smoke.plan.json --dry-run
+```bash
+npm run check        # node --check on bin, src, and scripts
+npm run smoke:mcp    # end-to-end MCP server smoke test
+npm run text:check   # text-health report (encoding/mojibake scan)
+npm run agent:run -- --plan ./examples/plans/runner-smoke.plan.json --dry-run
 ```
+
+Run `npm run check` and `npm run smoke:mcp` after any source change. `npm run text:check` writes `./.agent-checks/text-health-report.json` and flags encoding problems.
+
+## Repository Layout
+
+```text
+.
+├── bin/                      # package bin entrypoint
+├── .codex-plugin/plugin.json # Codex plugin manifest
+├── skills/                   # workflow Skills (orchestration rules)
+├── src/
+│   ├── core/                 # scheduler, claude-runner, result normalizer, process tree
+│   └── server.mjs            # MCP server + tool definitions
+├── schemas/                  # agent-result.schema.json, task-plan.schema.json
+├── scripts/                  # run-claude-agents, smoke-mcp, check-text-health
+├── examples/                 # mcp-config, plans, prompts
+├── docs/                     # protocol + roadmap docs
+└── package.json
+```
+
+## License
+
+MIT © Bohaohao

@@ -1,0 +1,29 @@
+{
+  "name": "subagent-control-protocol",
+  "version": "0.3.0",
+  "description": "Codex plugin exposing an MCP server for orchestrating structured, verifiable Claude Code subagents.",
+  "author": {
+    "name": "Bohaohao"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Bohaohao/subagent-control-protocol",
+  "repository": "https://github.com/Bohaohao/subagent-control-protocol",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Subagent Control Protocol",
+    "shortDescription": "Orchestrate Codex-led Claude Code subagents with structured, verifiable execution results.",
+    "longDescription": "The Subagent Control Protocol plugin registers an MCP server that lets Codex spawn and supervise Claude Code subagents. Each subagent returns a structured result describing files changed, commands run, verification evidence, risks, and next steps, enabling deterministic multi-agent orchestration with clear boundary controls.",
+    "developerName": "Bohaohao",
+    "category": "Productivity",
+    "capabilities": [
+      "MCP",
+      "Multi-agent orchestration"
+    ],
+    "defaultPrompt": [
+      "Run a Claude Code subagent that implements the assigned task and returns a structured JSON result.",
+      "Dispatch parallel Claude Code subagents with clear boundaries and collect their structured results.",
+      "Spawn a single Claude Code subagent to verify changes and report evidence, risks, and next steps."
+    ]
+  }
+}

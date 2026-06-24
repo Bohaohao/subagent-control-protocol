@@ -173,7 +173,6 @@ function normalizeTask(task, defaults, workspace, planDir) {
     model: merged.model,
     effort: merged.effort,
     timeoutMs,
-    maxBudgetUsd: merged.maxBudgetUsd,
     permissionMode: merged.permissionMode || 'default',
     addDirs,
     allowedTools: merged.allowedTools || [],

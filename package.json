@@ -1,6 +1,6 @@
 {
   "name": "subagent-control-protocol",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Installable MCP server for Codex-led Claude Code subagents with structured execution results.",
@@ -29,6 +29,9 @@
     "scripts",
     "docs",
     "examples",
+    "skills",
+    ".codex-plugin",
+    ".mcp.json",
     "README.md"
   ],
   "bin": {

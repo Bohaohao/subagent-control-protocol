@@ -255,7 +255,6 @@ function buildClaudeCommand(task, schema, claudeResolved, claudeBaseArgs = [], e
 
   pushOptionalArg(args, displayArgs, task.model, '--model')
   pushOptionalArg(args, displayArgs, task.effort, '--effort')
-  pushOptionalArg(args, displayArgs, task.maxBudgetUsd, '--max-budget-usd')
   pushOptionalArg(args, displayArgs, task.systemPrompt, '--append-system-prompt')
   // Always expose the task's own artifact dir so a large prompt saved to
   // prompt.md (outside the workspace) stays readable by the subagent.

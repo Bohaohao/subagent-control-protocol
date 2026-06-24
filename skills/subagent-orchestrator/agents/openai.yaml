@@ -1,0 +1,4 @@
+interface:
+  display_name: Subagent Orchestrator
+  short_description: Lets Codex delegate bounded work to Claude Code CLI subagents via the subagent-control-protocol MCP server, with parallel review/verification, non-overlapping implementation, and structured result summaries.
+  default_prompt: Use Claude subagents to review and verify this change in parallel, then summarize the findings.

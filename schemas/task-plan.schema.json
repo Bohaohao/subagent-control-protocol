@@ -21,7 +21,6 @@
           "enum": ["low", "medium", "high", "xhigh", "max"]
         },
         "timeoutMs": { "type": "integer", "minimum": 1000 },
-        "maxBudgetUsd": { "type": "number", "minimum": 0 },
         "permissionMode": {
           "type": "string",
           "enum": ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]
@@ -73,7 +72,6 @@
             "enum": ["low", "medium", "high", "xhigh", "max"]
           },
           "timeoutMs": { "type": "integer", "minimum": 1000 },
-          "maxBudgetUsd": { "type": "number", "minimum": 0 },
           "permissionMode": {
             "type": "string",
             "enum": ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]

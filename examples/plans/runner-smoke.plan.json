@@ -8,7 +8,6 @@
     "effort": "low",
     "timeoutMs": 120000,
     "permissionMode": "default",
-    "maxBudgetUsd": 0.2,
     "tools": []
   },
   "tasks": [

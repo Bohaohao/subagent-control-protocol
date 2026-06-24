@@ -1,4 +1,4 @@
 interface:
   display_name: Subagent Orchestrator
-  short_description: Lets Codex delegate bounded work to Claude Code CLI subagents via the subagent-control-protocol MCP server, with parallel review/verification, non-overlapping implementation, and structured result summaries.
-  default_prompt: Use Claude subagents to review and verify this change in parallel, then summarize the findings.
+  short_description: Lets Codex delegate bounded work to Claude Code CLI subagents via the subagent-control-protocol MCP server, with todoList-driven decomposition, parallel implementation, mandatory dual read-only review (software-engineering + real-user), and structured result summaries.
+  default_prompt: Use Claude subagents to work on this task. Codex should infer decomposition into a todoList, dispatch parallelizable work via subagent_run_many, run two read-only review agents (software-engineering and real-user) after implementation, integrate implementation plus both reviews, optionally do targeted fixes, then summarize the integrated result.

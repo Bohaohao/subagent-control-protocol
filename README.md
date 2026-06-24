@@ -96,7 +96,63 @@ Install the plugin into Codex and it registers the MCP server and the orchestrat
 
 把仓库作为 Codex 插件安装时，三部分协同生效：`plugin.json` 是清单，`.mcp.json` 注册 MCP Server，`skills/` 提供委派时机与方式的工作流规则。安装后执行工具与委派规则一同就位。
 
+## Minimal Prompt & Controller Workflow
+
+In normal use you do **not** need to specify concurrency or detailed MCP parameters in your prompt. Give Codex the task; the controller (Codex + the orchestrator Skill) decides decomposition, concurrency, and dispatch, while the MCP layer handles process lifecycle and structured output. The user-facing prompt can be minimal.
+
+正常使用时，你**无需**在 prompt 中指定并发或详细的 MCP 参数。给出任务即可：总控（Codex + orchestrator Skill）决定拆分、并发与派发，MCP 层负责进程生命周期与结构化输出。面向用户的 prompt 可以非常精简。
+
+### Minimal prompt (recommended)
+
+- **中文（推荐）:**
+  > 用 Claude 子 agent 施工这个任务。
+
+- **English (recommended):**
+  > Use Claude subagents to work on this task.
+
+Optional review-only variants:
+
+- **Review-only variant (EN):**
+  > Use Claude subagents to review this task — read-only, no edits.
+
+- **仅评审变体（中文）:**
+  > 用 Claude 子 agent 评审这个任务——只读，不改文件。
+
+These prompts contain no concurrency and no `subagent_run_many` / `permissionMode` knobs. That is intentional.
+
+这些 prompt 不含并发、`subagent_run_many` / `permissionMode` 等开关，这是有意为之。
+
+### Controller workflow behind the prompt
+
+You do not need to perform these steps yourself; this section documents what Codex must do as controller.
+
+Given a minimal prompt, Codex drives the full workflow itself:
+
+In plain language: Codex plans the work, runs independent implementers in parallel when safe, runs two read-only reviews after implementation, integrates the findings, and reports one final decision.
+
+1. **Build a `todoList`** — decompose the task into concrete, bounded steps.
+2. **Classify parallelizable work** — separate read-only work (review, research, verification) from implementation; mark which steps are independent and which depend on others.
+3. **Dispatch subagents from the `todoList`** — send parallelizable steps via `subagent_run_many` (read-only reviewers in parallel; implementation slices with exclusive, non-overlapping file ownership), ordered tasks via `subagent_run_task` with `dependsOn` where needed.
+4. **Add review agents** — after implementation, include a software-engineering review subagent and a real-user perspective review subagent (read-only), both depending on the implementers.
+5. **Integrate review findings** — read each `run-summary.json` and `tasks/<id>/result.json`, route fixes to the single owning agent of the failing file, and reconcile conflicts.
+6. **Report** — synthesize one outcome report and make the final accept/hold/ship decision. Never let a subagent decide merge, release, or push.
+
+收到这类精简 prompt 后，Codex 作为总控自行驱动完整流程：建立 `todoList` → 区分可并行任务 → 按 `todoList` 派发子 agent → 增加“软件工程评审”与“真实用户视角评审”子 agent → 整合评审结论 → 汇总报告并做最终决策。合并、发布、推送等决策始终由总控保留，不下放给子 agent。
+
+### Controller decision vs MCP execution layer
+
+Two distinct layers — keep them separate:
+
+- **Controller decision layer (Codex + Skill)** — owns *what* to do: the `todoList`, parallelization classification, dispatch order, agent prompts, file ownership, and the final accept/integrate/ship decision. This is where concurrency and routing are decided; the user does not state them.
+- **MCP execution layer (`src/server.mjs`)** — owns *how* it runs: Claude child-process lifecycle, bounded concurrency enforcement, timeouts, cancellation, logging, structured output, and run archival. It exposes the four tools but does not decide decomposition.
+
+两层要分开看：决策层（总控 + Skill）负责“做什么”——`todoList`、可并行分类、派发顺序、prompt、文件归属与最终决策，并发与路由在此决定，用户无需指定；执行层（MCP Server）负责“怎么跑”——进程生命周期、有界并发、超时、取消、日志、结构化输出与归档，只暴露工具，不参与拆分。
+
 ## Usage — Prompt Examples
+
+Most users should stop at the minimal prompts above. The examples below are optional advanced forms for cases where you want to hand the controller precise knobs.
+
+上文的最小化 prompt 是推荐默认。下方示例为显式完整形式，适用于你想给总控精确开关的情况。
 
 ### Parallel read-only review (EN)
 

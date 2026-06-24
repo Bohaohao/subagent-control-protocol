@@ -6,9 +6,13 @@ import { cancelRun, loadRunStatus, runTaskPlan } from './core/scheduler.mjs'
 
 const server = new McpServer({
   name: 'subagent-control-protocol',
-  version: '0.2.0',
+  version: '0.3.0',
   instructions: [
     'Use this MCP server when Codex should act as the controller and delegate bounded work to Claude Code CLI subagents.',
+    'Codex is the controller: it owns decomposition, dependency analysis, parallelism, and review; this MCP server is only the execution layer and never decides decomposition or parallelism on its own.',
+    'Before delegating construction tasks, build a todoList that, for each task, marks its dependencies, whether it is parallelizable, and the files it owns (exclusive file ownership prevents conflicting edits).',
+    'Dispatch parallelizable work through subagent_run_many (dependency-aware) and keep strictly serial work on subagent_run_task.',
+    'As a controller-side convention enforced by the orchestrator Skill, after implementation always add two read-only review subagents: one reviewing from a software-engineering perspective (correctness, structure, tests, risks) and one from a real-user perspective (does it actually solve the user request, is it usable). Reviewers must not edit files.',
     'Use subagent_run_task for one task, or subagent_run_many for dependency-aware parallel plans.',
     'Always inspect structuredContent.runSummary before treating delegated work as complete.',
     'Run directories contain controller-readable prompts, raw outputs, normalized task results, and run-summary.json.',

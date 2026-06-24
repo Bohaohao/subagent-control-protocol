@@ -59,6 +59,29 @@ npm link
 subagent-control-protocol
 ```
 
+Install it into Codex globally:
+
+```powershell
+cd D:\path\to\subagent-control-protocol
+npm install
+npm link
+```
+
+Then add this to the global Codex config at `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.subagent-control-protocol]
+command = "subagent-control-protocol"
+args = []
+startup_timeout_sec = 120
+tool_timeout_sec = 1200
+
+[mcp_servers.subagent-control-protocol.env]
+CLAUDE_BIN = "claude"
+```
+
+Restart Codex after changing global MCP config. In a Codex session, ask for `/mcp` or start a new thread to confirm the server is available.
+
 ## MCP Configuration
 
 Point your MCP client at this server. For local development, run the server

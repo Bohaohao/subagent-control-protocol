@@ -48,10 +48,9 @@ Then parses the JSON and cross-checks consistency:
 
 - `marketplace.json` has top-level `name`, `interface`, and a non-empty
   `plugins` array containing an entry named `subagent-control-protocol`.
-- The plugin entry's `source.path` (resolved relative to the repo root, i.e.
-  the marketplace root) points to a directory that contains
-  `.codex-plugin/plugin.json`. For the repo-as-plugin-bundle architecture this
-  is typically `./`.
+- The plugin entry's `source.path` resolves to
+  `plugins/subagent-control-protocol/`, which contains
+  `.codex-plugin/plugin.json`.
 - `plugin.json` name matches the marketplace plugin entry name; its `skills`
   and `mcpServers` pointers resolve to existing paths.
 - `.mcp.json` registers a `node` server named

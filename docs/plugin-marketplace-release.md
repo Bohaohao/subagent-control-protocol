@@ -18,8 +18,10 @@ records the precise behavior and release notes for contributors.
 
 ### Recommended: Codex plugin marketplace
 
-The repo is a Codex plugin bundle (`.codex-plugin/plugin.json` + `.mcp.json` +
-`skills/`). Add it as a marketplace source and install/enable the plugin:
+The repo is a Codex repo marketplace. The installable plugin bundle lives at
+`plugins/subagent-control-protocol/` and contains `.codex-plugin/plugin.json`,
+`.mcp.json`, `dist/`, and `skills/`. Add the repo as a marketplace source and
+install/enable the plugin:
 
 ```bash
 # Add this repo as a marketplace source (owner/repo)
@@ -122,17 +124,20 @@ manifest), users must upgrade through the marketplace to pick them up.
 2. Publish the runtime update manifest + build at `SCP_UPDATE_MANIFEST_URL` (or
    the default manifest location) so `dist/bootstrap.mjs` can pick it up.
 3. Tag the release and push so the marketplace source (`--ref`) can resolve it.
-4. Confirm the plugin bundle (`.agents/plugins/marketplace.json`,
-   `.codex-plugin/plugin.json`, `.mcp.json`, `dist/`, `skills/`) is intact — this is what the marketplace installs.
+4. Confirm the repo marketplace index (`.agents/plugins/marketplace.json`) and
+   plugin bundle (`plugins/subagent-control-protocol/.codex-plugin/plugin.json`,
+   `.mcp.json`, `dist/`, `skills/`) are intact — this is what the marketplace installs.
 5. Note in the release notes whether the release includes Skill/manifest changes
    (marketplace upgrade required) or runtime-only changes (self-update on
    restart suffices).
 
 ## Notes
 
-- The repo root is both the repo marketplace root and the plugin bundle.
-  `.agents/plugins/marketplace.json` exposes `source.path: "./"`, which points
-  back at this bundle.
+- The repo root is the repo marketplace root. The installable plugin bundle
+  lives at `plugins/subagent-control-protocol/`.
+- `.agents/plugins/marketplace.json` exposes
+  `source.path: "./plugins/subagent-control-protocol"`, which points at the
+  standard repo marketplace plugin bundle directory.
 - Never disable self-update expecting Skill updates to flow through the runtime
   channel — they do not. Skill/metadata changes always require a marketplace
   upgrade.

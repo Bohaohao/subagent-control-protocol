@@ -9,7 +9,7 @@
       "name": "subagent-control-protocol",
       "source": {
         "source": "local",
-        "path": "./"
+        "path": "./plugins/subagent-control-protocol"
       },
       "policy": {
         "installation": "AVAILABLE",

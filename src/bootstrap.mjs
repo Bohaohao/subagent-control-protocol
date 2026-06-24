@@ -19,7 +19,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const DEFAULT_MANIFEST_URL =
-  'https://raw.githubusercontent.com/Bohaohao/subagent-control-protocol/main/dist/latest.json'
+  'https://raw.githubusercontent.com/Bohaohao/subagent-control-protocol/main/plugins/subagent-control-protocol/dist/latest.json'
 const BUNDLED_VERSION = '__SCP_BUNDLED_VERSION__'
 
 const bootstrapDir = path.dirname(fileURLToPath(import.meta.url))

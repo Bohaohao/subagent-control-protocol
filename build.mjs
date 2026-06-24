@@ -17,13 +17,15 @@ import esbuild from 'esbuild'
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)))
 const distDir = path.join(rootDir, 'dist')
+const pluginDir = path.join(rootDir, 'plugins', 'subagent-control-protocol')
+const pluginDistDir = path.join(pluginDir, 'dist')
 const schemaPath = path.join(rootDir, 'schemas', 'agent-result.schema.json')
 
 const pkg = JSON.parse(await fs.readFile(path.join(rootDir, 'package.json'), 'utf8'))
 const schemaText = await fs.readFile(schemaPath, 'utf8')
 
 const RAW_BASE =
-  'https://raw.githubusercontent.com/Bohaohao/subagent-control-protocol/main/dist'
+  'https://raw.githubusercontent.com/Bohaohao/subagent-control-protocol/main/plugins/subagent-control-protocol/dist'
 
 function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex')
@@ -98,6 +100,20 @@ async function writeManifest(serverSha) {
   return manifest
 }
 
+async function copyPath(source, target) {
+  await fs.rm(target, { recursive: true, force: true })
+  await fs.cp(source, target, { recursive: true })
+}
+
+async function syncPluginBundle() {
+  await fs.mkdir(pluginDir, { recursive: true })
+  await copyPath(path.join(rootDir, '.codex-plugin'), path.join(pluginDir, '.codex-plugin'))
+  await copyPath(path.join(rootDir, 'skills'), path.join(pluginDir, 'skills'))
+  await copyPath(distDir, pluginDistDir)
+  await fs.copyFile(path.join(rootDir, '.mcp.json'), path.join(pluginDir, '.mcp.json'))
+  await fs.copyFile(path.join(rootDir, 'README.md'), path.join(pluginDir, 'README.md'))
+}
+
 await fs.mkdir(distDir, { recursive: true })
 await buildServer()
 await copyBootstrap()
@@ -109,3 +125,6 @@ const manifest = await writeManifest(serverHash)
 console.log(`[build] wrote dist/server.mjs (sha256 ${serverHash})`)
 console.log(`[build] wrote dist/bootstrap.mjs (sha256 ${bootstrapHash})`)
 console.log(`[build] wrote dist/latest.json for ${manifest.name}@${manifest.version}`)
+
+await syncPluginBundle()
+console.log(`[build] synced plugin bundle to ${path.relative(rootDir, pluginDir)}`)

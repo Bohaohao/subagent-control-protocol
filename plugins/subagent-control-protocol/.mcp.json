@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "subagent-control-protocol": {
+      "command": "node",
+      "args": [
+        "./dist/bootstrap.mjs"
+      ],
+      "cwd": ".",
+      "startup_timeout_sec": 120,
+      "tool_timeout_sec": 1200,
+      "env": {
+        "CLAUDE_BIN": "claude"
+      }
+    }
+  }
+}

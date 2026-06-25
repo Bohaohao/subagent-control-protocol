@@ -2,11 +2,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { cancelRun, loadRunStatus, runTaskPlan } from './core/scheduler.mjs'
+import { cancelRun, collectRun, loadRunStatus, runTaskPlan, startTaskPlan } from './core/scheduler.mjs'
 
 const server = new McpServer({
   name: 'subagent-control-protocol',
-  version: '0.3.2',
+  version: '0.3.3',
   instructions: [
     'Use this MCP server when Codex should act as the controller and delegate bounded work to Claude Code CLI subagents.',
     'Codex is the controller: it owns decomposition, dependency analysis, parallelism, and review; this MCP server is only the execution layer and never decides decomposition or parallelism on its own.',
@@ -17,6 +17,7 @@ const server = new McpServer({
     'Always inspect structuredContent.runSummary before treating delegated work as complete.',
     'Run directories contain controller-readable prompts, raw outputs, normalized task results, run-summary.json, and may include an events.jsonl append-only log of lifecycle/heartbeat events emitted by the runner.',
     'Prefer subagent_status for structured run status and event summaries (including heartbeats) rather than reading raw stdout/stderr files by default; subagent_status accepts recentEventsLimit to bound the number of recent event entries returned.',
+    'For long-running plans, use subagent_start to launch a dependency-aware plan in the background and return immediately with start info (runId/runDir), then use subagent_collect to fetch the final run summary or interim progress; subagent_start/subagent_collect are the async counterpart to the blocking subagent_run_many.',
   ].join(' '),
 })
 
@@ -193,6 +194,48 @@ const cancelOutputShape = {
   error: z.object(errorDetailShape).optional(),
 }
 
+// Output schema for subagent_start. The start info comes straight from
+// startTaskPlan; every field is optional so the schema validates regardless of
+// how much progress information the runner has populated at start time. This is
+// the async counterpart to runManyOutputShape: it returns immediately with
+// enough to locate and later collect the run (runId/runDir), not the results.
+const startOutputShape = {
+  ok: z.boolean(),
+  runId: z.string().optional(),
+  runDir: z.string().optional(),
+  outputDir: z.string().optional(),
+  startedAt: z.string().optional(),
+  workspace: z.string().optional(),
+  status: z.string().optional().describe('Start status, e.g. "running".'),
+  totalTasks: z.number().int().optional(),
+  concurrency: z.number().int().optional(),
+  dryRun: z.boolean().optional(),
+  active: z.array(z.record(z.string(), z.any())).optional().describe('Processes already started at return time, when available.'),
+  summary: z.record(z.string(), z.any()).optional().describe('Initial/progress summary when available; absent until the runner has one.'),
+  error: z.object(errorDetailShape).optional(),
+}
+
+// Output schema for subagent_collect. Mirrors the collectRun result: a run
+// locator (runId/runDir), a done flag and run-level status, the full run
+// summary when present (otherwise a minimal in-progress summary), per-task
+// results, and a bounded recent-events window. All payload fields optional so a
+// not-yet-complete run validates the same way a finished one does.
+const collectOutputShape = {
+  ok: z.boolean(),
+  runId: z.string().optional(),
+  runDir: z.string().optional(),
+  done: z.boolean().optional().describe('True once the run has reached a terminal state.'),
+  status: z.string().optional().describe('Run-level status, e.g. "running", "completed", "failed", "cancelled".'),
+  mode: z.enum(['single', 'list']).optional().describe('Present for in-progress status payloads borrowed from subagent_status.'),
+  summary: z.record(z.string(), z.any()).optional().describe('Full run-summary.json when available, otherwise a minimal in-progress summary.'),
+  runSummary: z.record(z.string(), z.any()).optional().describe('Alias for a terminal run summary when implementations choose to expose it separately.'),
+  results: z.array(z.object(taskResultShape)).optional(),
+  recentEvents: z.array(z.record(z.string(), z.any())).optional().describe('Bounded recent event window from task events.jsonl files, when requested.'),
+  taskEvents: z.array(z.record(z.string(), z.any())).optional().describe('Per-task compact event summaries for in-progress runs.'),
+  active: z.array(z.record(z.string(), z.any())).optional().describe('Active Claude child processes for this run, when known.'),
+  error: z.object(errorDetailShape).optional(),
+}
+
 server.registerTool(
   'subagent_run_task',
   {
@@ -251,6 +294,59 @@ server.registerTool(
       return jsonToolResult({ runSummary, results: runSummary.tasks })
     } catch (error) {
       return errorToolResult(error, 'run_many_failed')
+    }
+  },
+)
+
+server.registerTool(
+  'subagent_start',
+  {
+    title: 'Start Subagent Plan Asynchronously',
+    description: 'Start a dependency-aware Claude Code CLI subagent plan in the background and return immediately with structured start info (runId/runDir). This is the non-blocking counterpart to subagent_run_many: it does not wait for tasks to finish. Use subagent_collect to fetch the final run summary or interim progress. Input shape matches subagent_run_many (common run options + optional defaults + tasks). On failure returns a structured error object with isError=true.',
+    inputSchema: {
+      ...commonRunShape,
+      defaults: z.object(defaultsShape).optional(),
+      tasks: z.array(z.object({ ...taskShape, id: z.string().regex(/^[A-Za-z0-9._-]+$/), title: z.string() })).min(1),
+    },
+    outputSchema: startOutputShape,
+  },
+  async (input) => {
+    try {
+      const startInfo = await startTaskPlan(
+        {
+          version: 1,
+          defaults: input.defaults,
+          tasks: input.tasks,
+        },
+        pickRunOptions(input),
+      )
+      return jsonToolResult(startInfo)
+    } catch (error) {
+      return errorToolResult(error, 'start_failed')
+    }
+  },
+)
+
+server.registerTool(
+  'subagent_collect',
+  {
+    title: 'Collect Subagent Run Result',
+    description: 'Collect the final run summary or interim progress for a run started with subagent_start. Accepts runId and/or runDir (plus outputDir to disambiguate) and returns the collectRun result: run locator, done flag, run-level status, full run summary when available (otherwise a minimal in-progress summary), per-task results, and a bounded recent-events window when recentEventsLimit is supplied. Use this for final collection or progress polling; it does not start new work. On failure returns a structured error object with isError=true.',
+    inputSchema: {
+      runId: z.string().optional().describe('Run id to collect. When omitted, runDir is used to locate the run.'),
+      runDir: z.string().optional().describe('Run directory to collect. Used directly, or to resolve a runId.'),
+      workspace: z.string().optional().describe('Workspace used to resolve the default outputDir when runDir and outputDir are not supplied. Defaults to the MCP server working directory.'),
+      outputDir: z.string().optional().describe('Output directory to resolve a runId when runDir is not supplied. Defaults to <workspace>/.subagent-runs.'),
+      recentEventsLimit: z.number().int().positive().max(1000).optional().describe('Maximum number of recent event entries (from events.jsonl) to return. Omitted means no recent-events window is requested.'),
+    },
+    outputSchema: collectOutputShape,
+  },
+  async (input) => {
+    try {
+      const collected = await collectRun(input)
+      return jsonToolResult(collected)
+    } catch (error) {
+      return errorToolResult(error, 'collect_failed')
     }
   },
 )

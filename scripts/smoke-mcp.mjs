@@ -199,7 +199,128 @@ try {
     await fs.rename(summaryBackupPath, summaryPath)
   }
 
-  console.log(JSON.stringify({ ok: true, runDir, eventLogPath }, null, 2))
+  // --- Second-layer async start/collect workflow -----------------------------
+  // The async layer splits plan dispatch from result collection so the
+  // controller can start a plan and poll for completion instead of blocking:
+  //   subagent_start   -> kicks off a plan in the background and returns
+  //                       { ok, runId, runDir, status } without blocking.
+  //   subagent_collect -> polls a started run; returns { ok, done, runSummary }
+  //                       where `done` flips true once the run has settled.
+  // The contract asserted below is what the scheduler/server async
+  // implementation must satisfy. The dry-run plan keeps it fast and side-effect
+  // free, and the assertions stay permissive about where optional fields live
+  // (mirroring the status tool's tolerant shape handling above).
+  assert.ok(tools.tools.some((tool) => tool.name === 'subagent_start'))
+  assert.ok(tools.tools.some((tool) => tool.name === 'subagent_collect'))
+
+  const asyncOutputDir = path.join(tempDir, 'async-runs')
+  const start = await client.callTool({
+    name: 'subagent_start',
+    arguments: {
+      workspace: tempDir,
+      outputDir: asyncOutputDir,
+      concurrency: 1,
+      dryRun: true,
+      tasks: [
+        {
+          id: 'async-smoke',
+          title: 'MCP async dry-run smoke',
+          prompt: 'Confirm that async dry-run execution returns a structured result.',
+        },
+      ],
+    },
+  })
+  const startPayload = start.structuredContent
+  assert.equal(startPayload.ok, true, 'subagent_start must report ok=true')
+  assert.equal(typeof startPayload.runId, 'string', 'subagent_start must return runId as a string')
+  assert.ok(startPayload.runId.length > 0, 'subagent_start must return a non-empty runId')
+  assert.equal(typeof startPayload.runDir, 'string', 'subagent_start must return runDir as a string')
+  assert.ok(startPayload.runDir.length > 0, 'subagent_start must return a non-empty runDir')
+  // A non-error start status: any string that is not a terminal failure. The
+  // exact value (e.g. "started" / "running") is implementation-defined.
+  assert.equal(typeof startPayload.status, 'string', 'subagent_start must return a status string')
+  assert.ok(
+    !['failed', 'error', 'cancelled'].includes(startPayload.status),
+    `subagent_start status must not be an error status, got: ${startPayload.status}`,
+  )
+
+  // Poll subagent_collect until the run settles. Dry-run plans complete almost
+  // immediately, so a short bounded loop is enough; bail out defensively if the
+  // implementation never flips `done` so the assertion below reports it clearly.
+  const asyncRunId = startPayload.runId
+  const asyncRunDir = startPayload.runDir
+  let collect
+  const maxAttempts = 20
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    collect = await client.callTool({
+      name: 'subagent_collect',
+      arguments: { runId: asyncRunId, runDir: asyncRunDir },
+    })
+    if (collect.structuredContent.done === true) break
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  const collectPayload = collect.structuredContent
+  assert.equal(collectPayload.ok, true, 'subagent_collect must report ok=true')
+  assert.equal(
+    collectPayload.done,
+    true,
+    'subagent_collect must report done=true once the run settles',
+  )
+
+  // runSummary may be surfaced as `runSummary` (full summary) or `summary`
+  // (alias); tolerate either, mirroring the status tool's permissive shape.
+  const asyncSummary = collectPayload.runSummary || collectPayload.summary
+  assert.ok(asyncSummary, 'subagent_collect must return a runSummary/summary when done')
+  assert.equal(asyncSummary.totalTasks, 1, 'async dry-run plan must report exactly one task')
+  assert.equal(asyncSummary.runId, asyncRunId, 'collect runSummary runId must match start runId')
+
+  const collectByRunId = await client.callTool({
+    name: 'subagent_collect',
+    arguments: { runId: asyncRunId },
+  })
+  assert.equal(collectByRunId.structuredContent.ok, true, 'subagent_collect runId-only must report ok=true')
+  assert.equal(collectByRunId.structuredContent.done, true, 'subagent_collect runId-only must resolve completed runs')
+  assert.equal(
+    (collectByRunId.structuredContent.runSummary || collectByRunId.structuredContent.summary).runId,
+    asyncRunId,
+    'subagent_collect runId-only summary runId must match start runId',
+  )
+
+  // Event/status data must remain readable through the async path: locate the
+  // run's events.jsonl (on the summary, its task entries, or a nested
+  // summary.tasks collection) and confirm it carries the dry-run lifecycle.
+  const asyncEventLogPath = findEventLogPath(asyncSummary, null)
+  assert.ok(asyncEventLogPath, 'async collect must surface an eventLogPath (events.jsonl)')
+  assert.ok(
+    asyncEventLogPath.endsWith('events.jsonl'),
+    `async eventLogPath must point at events.jsonl, got: ${asyncEventLogPath}`,
+  )
+  assert.ok(
+    path.resolve(asyncEventLogPath).startsWith(path.resolve(asyncRunDir) + path.sep),
+    'async eventLogPath must live inside the run directory',
+  )
+  const asyncEvents = await readJsonLines(asyncEventLogPath)
+  assert.ok(asyncEvents.every((event) => event.timestamp), 'every async event must include timestamp')
+  assert.ok(
+    asyncEvents.some((event) => event.type === 'task_started' && event.taskId === 'async-smoke'),
+    'async events.jsonl must include a task_started event for the async-smoke task',
+  )
+
+  // The status tool must also still resolve the async run directory.
+  const asyncStatus = await client.callTool({
+    name: 'subagent_status',
+    arguments: { runDir: asyncRunDir, recentEventsLimit: 5 },
+  })
+  assert.equal(asyncStatus.structuredContent.mode, 'single')
+  assert.equal(asyncStatus.structuredContent.summary.runId, asyncRunId)
+
+  console.log(
+    JSON.stringify(
+      { ok: true, runDir, eventLogPath, asyncRunDir, asyncEventLogPath },
+      null,
+      2,
+    ),
+  )
 } finally {
   await transport.close()
   await fs.rm(tempDir, { recursive: true, force: true })

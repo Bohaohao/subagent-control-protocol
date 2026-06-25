@@ -7,11 +7,28 @@ import { createRunId, readJson, writeJson } from './json.mjs'
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const resultSchemaPath = path.join(packageRoot, 'schemas', 'agent-result.schema.json')
 
-// runId -> { cancelled: boolean }. Lets cancelRun() stop pending tasks, not just
-// kill the currently-running Claude processes.
+// runId -> active run metadata. Lets cancelRun() stop pending tasks, not just
+// kill the currently-running Claude processes, and lets collectRun resolve a
+// live async run from runId alone.
 const activeRuns = new Map()
+const retainedRuns = new Map()
+const RETAINED_RUN_LIMIT = 100
 
 export async function runTaskPlan(plan, options = {}) {
+  const { scheduler, tasks } = await prepareRun(plan, options)
+  activeRuns.set(scheduler.runId, scheduler.cancellation)
+  try {
+    return await executeRun(scheduler, tasks)
+  } finally {
+    activeRuns.delete(scheduler.runId)
+  }
+}
+
+// Validate and prepare the same plan shape runTaskPlan uses, write
+// run-input.json, and build the in-memory scheduler context — without starting
+// execution. Shared by the synchronous runTaskPlan and the asynchronous
+// startTaskPlan so both enforce identical plan validation and artifact layout.
+async function prepareRun(plan, options = {}) {
   assertPlanShape(plan)
 
   const planDir = path.resolve(options.planDir || process.cwd())
@@ -29,6 +46,7 @@ export async function runTaskPlan(plan, options = {}) {
 
   const runId = options.runId || createRunId()
   const runDir = path.join(outputDir, runId)
+  const startedAt = new Date().toISOString()
   const schema = options.schema || await readJson(resultSchemaPath)
   const claudeExecutable = await resolveClaudeExecutable(
     options.claudeExecutable || process.env.CLAUDE_BIN || process.env.CLAUDE_CODE_COMMAND,
@@ -42,6 +60,10 @@ export async function runTaskPlan(plan, options = {}) {
 
   await fs.mkdir(path.join(runDir, 'tasks'), { recursive: true })
   await writeJson(path.join(runDir, 'run-input.json'), {
+    runId,
+    runDir,
+    outputDir,
+    startedAt,
     workspace,
     concurrency,
     dryRun,
@@ -55,31 +77,292 @@ export async function runTaskPlan(plan, options = {}) {
     })),
   })
 
+  const cancellation = {
+    cancelled: false,
+    // Carrying runDir/outputDir on the cancellation record lets collectRun
+    // resolve a live run from runId alone, and lets cancelRun explain which
+    // run it touched.
+    runId,
+    runDir,
+    outputDir,
+    startedAt,
+    async: false,
+  }
+
   const scheduler = {
     runId,
     runDir,
     workspace,
+    outputDir,
     concurrency,
     dryRun,
     schema,
     claudeExecutable,
     claudeBaseArgs,
     env: options.env,
-    startedAt: new Date().toISOString(),
+    startedAt,
     maxParallelObserved: 0,
-    cancellation: { cancelled: false },
+    cancellation,
   }
 
-  activeRuns.set(runId, scheduler.cancellation)
-  try {
-    const results = await runTasks(tasks, scheduler)
-    const endedAt = new Date().toISOString()
-    const summary = summarizeRun({ ...scheduler, endedAt }, tasks, results)
-    await writeJson(path.join(runDir, 'run-summary.json'), summary)
-    return summary
-  } finally {
-    activeRuns.delete(runId)
+  return { scheduler, tasks, outputDir }
+}
+
+// Drive a prepared run to completion and persist run-summary.json. Used by both
+// runTaskPlan (awaited) and startTaskPlan (fire-and-forget background promise).
+async function executeRun(scheduler, tasks) {
+  const results = await runTasks(tasks, scheduler)
+  const endedAt = new Date().toISOString()
+  const summary = summarizeRun({ ...scheduler, endedAt }, tasks, results)
+  await writeJson(path.join(scheduler.runDir, 'run-summary.json'), summary)
+  return summary
+}
+
+// Second-layer asynchronous entry point. Validates and prepares the plan
+// (identical to runTaskPlan), writes run-input.json, kicks off execution in the
+// background, and returns immediately with a controller-readable handle. The
+// background promise never surfaces an unhandled rejection: on success it writes
+// the normal run-summary.json; on failure it writes a readable failure summary
+// so collectRun/loadRunStatus can explain what went wrong.
+export async function startTaskPlan(plan, options = {}) {
+  const { scheduler, tasks, outputDir } = await prepareRun(plan, options)
+  scheduler.cancellation.async = true
+  activeRuns.set(scheduler.runId, scheduler.cancellation)
+
+  const background = executeRun(scheduler, tasks)
+    .then((summary) => {
+      scheduler.cancellation.summary = summary
+      scheduler.cancellation.status = deriveRunStatus(summary)
+    })
+    .catch(async (error) => {
+      scheduler.cancellation.error = error
+      scheduler.cancellation.status = 'failed'
+      try {
+        scheduler.cancellation.summary = await writeFailureSummary(scheduler, tasks, error)
+      } catch {
+        // writeFailureSummary is best-effort; cancellation.error is already set
+        // so collectRun/loadRunStatus can still explain the failure from the
+        // per-task result.json files and run-input.json that exist on disk.
+      }
+    })
+    .finally(() => {
+      // Drop the active registration once terminal, but retain a compact
+      // runId -> runDir handle so subagent_collect can still resolve a runId-only
+      // request after the background run has already completed.
+      retainRunHandle(scheduler.cancellation)
+      activeRuns.delete(scheduler.runId)
+    })
+  // Belt-and-suspenders: the chain above swallows every rejection, but keep an
+  // explicit catcher so a future edit can never leak an unhandled rejection
+  // into the host process (e.g. the MCP server).
+  background.catch(() => {})
+  scheduler.cancellation.promise = background
+
+  return {
+    runId: scheduler.runId,
+    runDir: scheduler.runDir,
+    workspace: scheduler.workspace,
+    outputDir,
+    status: 'running',
+    startedAt: scheduler.startedAt,
+    totalTasks: tasks.length,
+    concurrency: scheduler.concurrency,
+    dryRun: scheduler.dryRun,
   }
+}
+
+// Collect the status of an async (or sync) run. Returns whether the run is done
+// plus a readable summary. Resolution order for the target run:
+//   1. explicit runDir
+//   2. runId still active (resolved from the active-run map)
+// Once run-summary.json exists the run is treated as done; otherwise a
+// loadRunStatus-compatible progress/event view is returned for an in-progress run.
+export async function collectRun(input = {}) {
+  const runId = input.runId
+  let runDir = input.runDir ? path.resolve(input.runDir) : null
+
+  if (!runDir && runId) {
+    const record = activeRuns.get(runId)
+    if (record?.runDir) runDir = record.runDir
+  }
+  if (!runDir && runId) {
+    const record = retainedRuns.get(runId)
+    if (record?.runDir) runDir = record.runDir
+  }
+  if (!runDir && runId && input.outputDir) {
+    const candidateRunDir = path.join(path.resolve(input.outputDir), runId)
+    try {
+      await fs.access(candidateRunDir)
+      runDir = candidateRunDir
+    } catch {
+      runDir = null
+    }
+  }
+  if (!runDir && runId) {
+    const defaultOutputDir = input.outputDir
+      || path.join(path.resolve(input.workspace || process.cwd()), '.subagent-runs')
+    const defaultRunDir = path.join(path.resolve(defaultOutputDir), runId)
+    try {
+      await fs.access(defaultRunDir)
+      runDir = defaultRunDir
+    } catch {
+      runDir = null
+    }
+  }
+  if (!runDir) {
+    throw new Error('collectRun requires runDir, an active runId, or outputDir with runId')
+  }
+
+  const resolvedRunId = runId || path.basename(runDir)
+  const summaryPath = path.join(runDir, 'run-summary.json')
+  let summary = null
+  try {
+    summary = await readJson(summaryPath)
+  } catch {
+    summary = null
+  }
+  if (!summary) summary = await recoverSummaryFromTaskResults(runDir)
+
+  if (summary) {
+    const eventView = await buildRunEventView(summary, runDir, {
+      recentEventsLimit: input.recentEventsLimit,
+    })
+    return {
+      done: true,
+      runId: summary.runId || resolvedRunId,
+      runDir,
+      status: deriveRunStatus(summary),
+      summary,
+      runSummary: summary,
+      results: Array.isArray(summary.tasks) ? summary.tasks : [],
+      active: listActiveProcesses(summary.runId || resolvedRunId),
+      recentEvents: eventView.recentEvents,
+      taskEvents: eventView.taskEvents,
+    }
+  }
+
+  // Still running: surface the same progress/event state subagent_status uses.
+  const progress = await loadRunStatus({ runDir, recentEventsLimit: input.recentEventsLimit })
+  return {
+    done: false,
+    runId: resolvedRunId,
+    runDir,
+    status: 'running',
+    mode: progress.mode,
+    summary: progress.summary,
+    active: progress.active,
+    recentEvents: progress.recentEvents,
+    taskEvents: progress.taskEvents,
+  }
+}
+
+function retainRunHandle(record) {
+  if (!record?.runId || !record?.runDir) return
+  retainedRuns.set(record.runId, {
+    runId: record.runId,
+    runDir: record.runDir,
+    outputDir: record.outputDir,
+    status: record.status,
+    endedAt: new Date().toISOString(),
+  })
+  while (retainedRuns.size > RETAINED_RUN_LIMIT) {
+    const firstKey = retainedRuns.keys().next().value
+    if (!firstKey) break
+    retainedRuns.delete(firstKey)
+  }
+}
+
+async function recoverSummaryFromTaskResults(runDir) {
+  let input
+  try {
+    input = await readJson(path.join(runDir, 'run-input.json'))
+  } catch {
+    return null
+  }
+  const tasks = Array.isArray(input.tasks) ? input.tasks : []
+  if (!tasks.length) return null
+
+  const results = []
+  for (const task of tasks) {
+    try {
+      results.push(await readJson(path.join(runDir, 'tasks', task.id, 'result.json')))
+    } catch {
+      return null
+    }
+  }
+
+  const endedAt = new Date().toISOString()
+  const summary = summarizeRun(
+    {
+      runId: input.runId || path.basename(runDir),
+      runDir,
+      startedAt: input.startedAt,
+      endedAt,
+      workspace: input.workspace,
+      concurrency: input.concurrency,
+      maxParallelObserved: input.concurrency || 0,
+      dryRun: input.dryRun,
+    },
+    tasks,
+    results,
+  )
+  summary.recovered = true
+  return summary
+}
+
+// Derive a single run-level status from a run summary. summarizeRun does not
+// emit a top-level status, so infer it from the task tallies (and any explicit
+// status/error written by the async failure path).
+function deriveRunStatus(summary) {
+  if (!summary || typeof summary !== 'object') return 'unknown'
+  if (typeof summary.status === 'string') return summary.status
+  if (summary.error) return 'failed'
+  if ((summary.cancelledTasks || 0) > 0) return 'cancelled'
+  if ((summary.failedTasks || 0) > 0 || (summary.timedOutTasks || 0) > 0) return 'failed'
+  if ((summary.blockedTasks || 0) > 0) return 'blocked'
+  const total = summary.totalTasks || 0
+  const finished = (summary.completedTasks || 0) + (summary.partialTasks || 0)
+  if (total > 0 && finished >= total) return 'completed'
+  return 'running'
+}
+
+// Persist a readable failure summary when the async background run rejects
+// (e.g. a dependency cycle surfaced mid-run, or runTasks threw). Gathers
+// whatever per-task result.json files already made it to disk so the summary
+// explains how far the run got; tasks that never started are marked cancelled
+// (if the run was cancelled) or skipped.
+async function writeFailureSummary(scheduler, tasks, error) {
+  const endedAt = new Date().toISOString()
+  const results = await collectPersistedTaskResults(scheduler.runDir, tasks, scheduler)
+  const summary = summarizeRun({ ...scheduler, endedAt }, tasks, results)
+  summary.status = 'failed'
+  summary.error = error?.stack || String(error)
+  summary.endedAt = endedAt
+  await writeJson(path.join(scheduler.runDir, 'run-summary.json'), summary)
+  return summary
+}
+
+async function collectPersistedTaskResults(runDir, tasks, scheduler) {
+  const cancelled = Boolean(scheduler?.cancellation?.cancelled)
+  const now = new Date().toISOString()
+  const results = []
+  for (const task of tasks) {
+    const taskDir = path.join(runDir, 'tasks', task.id)
+    try {
+      results.push(await readJson(path.join(taskDir, 'result.json')))
+    } catch {
+      results.push({
+        id: task.id,
+        title: task.title,
+        status: cancelled ? 'cancelled' : 'skipped',
+        startedAt: now,
+        endedAt: now,
+        taskDir,
+        reason: 'Run failed before this task produced a result',
+      })
+    }
+  }
+  return results
 }
 
 // Upper bound on how many recent events we surface in a single-run status
@@ -351,7 +634,9 @@ function countRunsWithEventLogs(runs) {
 
 export async function cancelRun(runId) {
   // Signal the scheduler loop to stop starting pending tasks, then kill the
-  // Claude processes that are already running for this run.
+  // Claude processes that are already running for this run. Works for both
+  // synchronous runTaskPlan runs and asynchronous startTaskPlan runs — both
+  // register the same cancellation record under runId.
   const cancellation = activeRuns.get(runId)
   if (cancellation) cancellation.cancelled = true
   return cancelActiveRun(runId)

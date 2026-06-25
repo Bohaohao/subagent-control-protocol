@@ -32120,7 +32120,18 @@ async function appendEvent(eventLogPath, event) {
 var packageRoot = path3.resolve(path3.dirname(fileURLToPath(import.meta.url)), "..", "..");
 var resultSchemaPath = path3.join(packageRoot, "schemas", "agent-result.schema.json");
 var activeRuns = /* @__PURE__ */ new Map();
+var retainedRuns = /* @__PURE__ */ new Map();
+var RETAINED_RUN_LIMIT = 100;
 async function runTaskPlan(plan, options = {}) {
+  const { scheduler, tasks } = await prepareRun(plan, options);
+  activeRuns.set(scheduler.runId, scheduler.cancellation);
+  try {
+    return await executeRun(scheduler, tasks);
+  } finally {
+    activeRuns.delete(scheduler.runId);
+  }
+}
+async function prepareRun(plan, options = {}) {
   assertPlanShape(plan);
   const planDir = path3.resolve(options.planDir || process.cwd());
   const workspace = path3.resolve(planDir, String(options.workspace || plan.workspace || "."));
@@ -32135,6 +32146,7 @@ async function runTaskPlan(plan, options = {}) {
   }
   const runId = options.runId || createRunId();
   const runDir = path3.join(outputDir, runId);
+  const startedAt = (/* @__PURE__ */ new Date()).toISOString();
   const schema = options.schema || define_SCP_RESULT_SCHEMA_INLINE_default;
   const claudeExecutable = await resolveClaudeExecutable(
     options.claudeExecutable || process.env.CLAUDE_BIN || process.env.CLAUDE_CODE_COMMAND
@@ -32147,6 +32159,10 @@ async function runTaskPlan(plan, options = {}) {
   validateDependencies(tasks);
   await fs4.mkdir(path3.join(runDir, "tasks"), { recursive: true });
   await writeJson(path3.join(runDir, "run-input.json"), {
+    runId,
+    runDir,
+    outputDir,
+    startedAt,
     workspace,
     concurrency,
     dryRun,
@@ -32159,30 +32175,239 @@ async function runTaskPlan(plan, options = {}) {
       timeoutMs: task.timeoutMs
     }))
   });
+  const cancellation = {
+    cancelled: false,
+    // Carrying runDir/outputDir on the cancellation record lets collectRun
+    // resolve a live run from runId alone, and lets cancelRun explain which
+    // run it touched.
+    runId,
+    runDir,
+    outputDir,
+    startedAt,
+    async: false
+  };
   const scheduler = {
     runId,
     runDir,
     workspace,
+    outputDir,
     concurrency,
     dryRun,
     schema,
     claudeExecutable,
     claudeBaseArgs,
     env: options.env,
-    startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    startedAt,
     maxParallelObserved: 0,
-    cancellation: { cancelled: false }
+    cancellation
   };
-  activeRuns.set(runId, scheduler.cancellation);
-  try {
-    const results = await runTasks(tasks, scheduler);
-    const endedAt = (/* @__PURE__ */ new Date()).toISOString();
-    const summary = summarizeRun({ ...scheduler, endedAt }, tasks, results);
-    await writeJson(path3.join(runDir, "run-summary.json"), summary);
-    return summary;
-  } finally {
-    activeRuns.delete(runId);
+  return { scheduler, tasks, outputDir };
+}
+async function executeRun(scheduler, tasks) {
+  const results = await runTasks(tasks, scheduler);
+  const endedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const summary = summarizeRun({ ...scheduler, endedAt }, tasks, results);
+  await writeJson(path3.join(scheduler.runDir, "run-summary.json"), summary);
+  return summary;
+}
+async function startTaskPlan(plan, options = {}) {
+  const { scheduler, tasks, outputDir } = await prepareRun(plan, options);
+  scheduler.cancellation.async = true;
+  activeRuns.set(scheduler.runId, scheduler.cancellation);
+  const background = executeRun(scheduler, tasks).then((summary) => {
+    scheduler.cancellation.summary = summary;
+    scheduler.cancellation.status = deriveRunStatus(summary);
+  }).catch(async (error51) => {
+    scheduler.cancellation.error = error51;
+    scheduler.cancellation.status = "failed";
+    try {
+      scheduler.cancellation.summary = await writeFailureSummary(scheduler, tasks, error51);
+    } catch {
+    }
+  }).finally(() => {
+    retainRunHandle(scheduler.cancellation);
+    activeRuns.delete(scheduler.runId);
+  });
+  background.catch(() => {
+  });
+  scheduler.cancellation.promise = background;
+  return {
+    runId: scheduler.runId,
+    runDir: scheduler.runDir,
+    workspace: scheduler.workspace,
+    outputDir,
+    status: "running",
+    startedAt: scheduler.startedAt,
+    totalTasks: tasks.length,
+    concurrency: scheduler.concurrency,
+    dryRun: scheduler.dryRun
+  };
+}
+async function collectRun(input = {}) {
+  const runId = input.runId;
+  let runDir = input.runDir ? path3.resolve(input.runDir) : null;
+  if (!runDir && runId) {
+    const record2 = activeRuns.get(runId);
+    if (record2?.runDir) runDir = record2.runDir;
   }
+  if (!runDir && runId) {
+    const record2 = retainedRuns.get(runId);
+    if (record2?.runDir) runDir = record2.runDir;
+  }
+  if (!runDir && runId && input.outputDir) {
+    const candidateRunDir = path3.join(path3.resolve(input.outputDir), runId);
+    try {
+      await fs4.access(candidateRunDir);
+      runDir = candidateRunDir;
+    } catch {
+      runDir = null;
+    }
+  }
+  if (!runDir && runId) {
+    const defaultOutputDir = input.outputDir || path3.join(path3.resolve(input.workspace || process.cwd()), ".subagent-runs");
+    const defaultRunDir = path3.join(path3.resolve(defaultOutputDir), runId);
+    try {
+      await fs4.access(defaultRunDir);
+      runDir = defaultRunDir;
+    } catch {
+      runDir = null;
+    }
+  }
+  if (!runDir) {
+    throw new Error("collectRun requires runDir, an active runId, or outputDir with runId");
+  }
+  const resolvedRunId = runId || path3.basename(runDir);
+  const summaryPath = path3.join(runDir, "run-summary.json");
+  let summary = null;
+  try {
+    summary = await readJson(summaryPath);
+  } catch {
+    summary = null;
+  }
+  if (!summary) summary = await recoverSummaryFromTaskResults(runDir);
+  if (summary) {
+    const eventView = await buildRunEventView(summary, runDir, {
+      recentEventsLimit: input.recentEventsLimit
+    });
+    return {
+      done: true,
+      runId: summary.runId || resolvedRunId,
+      runDir,
+      status: deriveRunStatus(summary),
+      summary,
+      runSummary: summary,
+      results: Array.isArray(summary.tasks) ? summary.tasks : [],
+      active: listActiveProcesses(summary.runId || resolvedRunId),
+      recentEvents: eventView.recentEvents,
+      taskEvents: eventView.taskEvents
+    };
+  }
+  const progress = await loadRunStatus({ runDir, recentEventsLimit: input.recentEventsLimit });
+  return {
+    done: false,
+    runId: resolvedRunId,
+    runDir,
+    status: "running",
+    mode: progress.mode,
+    summary: progress.summary,
+    active: progress.active,
+    recentEvents: progress.recentEvents,
+    taskEvents: progress.taskEvents
+  };
+}
+function retainRunHandle(record2) {
+  if (!record2?.runId || !record2?.runDir) return;
+  retainedRuns.set(record2.runId, {
+    runId: record2.runId,
+    runDir: record2.runDir,
+    outputDir: record2.outputDir,
+    status: record2.status,
+    endedAt: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  while (retainedRuns.size > RETAINED_RUN_LIMIT) {
+    const firstKey = retainedRuns.keys().next().value;
+    if (!firstKey) break;
+    retainedRuns.delete(firstKey);
+  }
+}
+async function recoverSummaryFromTaskResults(runDir) {
+  let input;
+  try {
+    input = await readJson(path3.join(runDir, "run-input.json"));
+  } catch {
+    return null;
+  }
+  const tasks = Array.isArray(input.tasks) ? input.tasks : [];
+  if (!tasks.length) return null;
+  const results = [];
+  for (const task of tasks) {
+    try {
+      results.push(await readJson(path3.join(runDir, "tasks", task.id, "result.json")));
+    } catch {
+      return null;
+    }
+  }
+  const endedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const summary = summarizeRun(
+    {
+      runId: input.runId || path3.basename(runDir),
+      runDir,
+      startedAt: input.startedAt,
+      endedAt,
+      workspace: input.workspace,
+      concurrency: input.concurrency,
+      maxParallelObserved: input.concurrency || 0,
+      dryRun: input.dryRun
+    },
+    tasks,
+    results
+  );
+  summary.recovered = true;
+  return summary;
+}
+function deriveRunStatus(summary) {
+  if (!summary || typeof summary !== "object") return "unknown";
+  if (typeof summary.status === "string") return summary.status;
+  if (summary.error) return "failed";
+  if ((summary.cancelledTasks || 0) > 0) return "cancelled";
+  if ((summary.failedTasks || 0) > 0 || (summary.timedOutTasks || 0) > 0) return "failed";
+  if ((summary.blockedTasks || 0) > 0) return "blocked";
+  const total = summary.totalTasks || 0;
+  const finished = (summary.completedTasks || 0) + (summary.partialTasks || 0);
+  if (total > 0 && finished >= total) return "completed";
+  return "running";
+}
+async function writeFailureSummary(scheduler, tasks, error51) {
+  const endedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const results = await collectPersistedTaskResults(scheduler.runDir, tasks, scheduler);
+  const summary = summarizeRun({ ...scheduler, endedAt }, tasks, results);
+  summary.status = "failed";
+  summary.error = error51?.stack || String(error51);
+  summary.endedAt = endedAt;
+  await writeJson(path3.join(scheduler.runDir, "run-summary.json"), summary);
+  return summary;
+}
+async function collectPersistedTaskResults(runDir, tasks, scheduler) {
+  const cancelled = Boolean(scheduler?.cancellation?.cancelled);
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const results = [];
+  for (const task of tasks) {
+    const taskDir = path3.join(runDir, "tasks", task.id);
+    try {
+      results.push(await readJson(path3.join(taskDir, "result.json")));
+    } catch {
+      results.push({
+        id: task.id,
+        title: task.title,
+        status: cancelled ? "cancelled" : "skipped",
+        startedAt: now,
+        endedAt: now,
+        taskDir,
+        reason: "Run failed before this task produced a result"
+      });
+    }
+  }
+  return results;
 }
 var DEFAULT_RECENT_EVENTS_LIMIT = 20;
 async function loadRunStatus({ runDir, outputDir, limit = 20, recentEventsLimit } = {}) {
@@ -32598,7 +32823,7 @@ function firstNonEmptyArray(...values) {
 // src/server.mjs
 var server = new McpServer({
   name: "subagent-control-protocol",
-  version: "0.3.2",
+  version: "0.3.3",
   instructions: [
     "Use this MCP server when Codex should act as the controller and delegate bounded work to Claude Code CLI subagents.",
     "Codex is the controller: it owns decomposition, dependency analysis, parallelism, and review; this MCP server is only the execution layer and never decides decomposition or parallelism on its own.",
@@ -32608,7 +32833,8 @@ var server = new McpServer({
     "Use subagent_run_task for one task, or subagent_run_many for dependency-aware parallel plans.",
     "Always inspect structuredContent.runSummary before treating delegated work as complete.",
     "Run directories contain controller-readable prompts, raw outputs, normalized task results, run-summary.json, and may include an events.jsonl append-only log of lifecycle/heartbeat events emitted by the runner.",
-    "Prefer subagent_status for structured run status and event summaries (including heartbeats) rather than reading raw stdout/stderr files by default; subagent_status accepts recentEventsLimit to bound the number of recent event entries returned."
+    "Prefer subagent_status for structured run status and event summaries (including heartbeats) rather than reading raw stdout/stderr files by default; subagent_status accepts recentEventsLimit to bound the number of recent event entries returned.",
+    "For long-running plans, use subagent_start to launch a dependency-aware plan in the background and return immediately with start info (runId/runDir), then use subagent_collect to fetch the final run summary or interim progress; subagent_start/subagent_collect are the async counterpart to the blocking subagent_run_many."
   ].join(" ")
 });
 var permissionMode = external_exports.enum([
@@ -32744,6 +32970,36 @@ var cancelOutputShape = {
   cancelledProcesses: external_exports.number().int().optional(),
   error: external_exports.object(errorDetailShape).optional()
 };
+var startOutputShape = {
+  ok: external_exports.boolean(),
+  runId: external_exports.string().optional(),
+  runDir: external_exports.string().optional(),
+  outputDir: external_exports.string().optional(),
+  startedAt: external_exports.string().optional(),
+  workspace: external_exports.string().optional(),
+  status: external_exports.string().optional().describe('Start status, e.g. "running".'),
+  totalTasks: external_exports.number().int().optional(),
+  concurrency: external_exports.number().int().optional(),
+  dryRun: external_exports.boolean().optional(),
+  active: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe("Processes already started at return time, when available."),
+  summary: external_exports.record(external_exports.string(), external_exports.any()).optional().describe("Initial/progress summary when available; absent until the runner has one."),
+  error: external_exports.object(errorDetailShape).optional()
+};
+var collectOutputShape = {
+  ok: external_exports.boolean(),
+  runId: external_exports.string().optional(),
+  runDir: external_exports.string().optional(),
+  done: external_exports.boolean().optional().describe("True once the run has reached a terminal state."),
+  status: external_exports.string().optional().describe('Run-level status, e.g. "running", "completed", "failed", "cancelled".'),
+  mode: external_exports.enum(["single", "list"]).optional().describe("Present for in-progress status payloads borrowed from subagent_status."),
+  summary: external_exports.record(external_exports.string(), external_exports.any()).optional().describe("Full run-summary.json when available, otherwise a minimal in-progress summary."),
+  runSummary: external_exports.record(external_exports.string(), external_exports.any()).optional().describe("Alias for a terminal run summary when implementations choose to expose it separately."),
+  results: external_exports.array(external_exports.object(taskResultShape)).optional(),
+  recentEvents: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe("Bounded recent event window from task events.jsonl files, when requested."),
+  taskEvents: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe("Per-task compact event summaries for in-progress runs."),
+  active: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe("Active Claude child processes for this run, when known."),
+  error: external_exports.object(errorDetailShape).optional()
+};
 server.registerTool(
   "subagent_run_task",
   {
@@ -32801,6 +33057,57 @@ server.registerTool(
       return jsonToolResult({ runSummary, results: runSummary.tasks });
     } catch (error51) {
       return errorToolResult(error51, "run_many_failed");
+    }
+  }
+);
+server.registerTool(
+  "subagent_start",
+  {
+    title: "Start Subagent Plan Asynchronously",
+    description: "Start a dependency-aware Claude Code CLI subagent plan in the background and return immediately with structured start info (runId/runDir). This is the non-blocking counterpart to subagent_run_many: it does not wait for tasks to finish. Use subagent_collect to fetch the final run summary or interim progress. Input shape matches subagent_run_many (common run options + optional defaults + tasks). On failure returns a structured error object with isError=true.",
+    inputSchema: {
+      ...commonRunShape,
+      defaults: external_exports.object(defaultsShape).optional(),
+      tasks: external_exports.array(external_exports.object({ ...taskShape, id: external_exports.string().regex(/^[A-Za-z0-9._-]+$/), title: external_exports.string() })).min(1)
+    },
+    outputSchema: startOutputShape
+  },
+  async (input) => {
+    try {
+      const startInfo = await startTaskPlan(
+        {
+          version: 1,
+          defaults: input.defaults,
+          tasks: input.tasks
+        },
+        pickRunOptions(input)
+      );
+      return jsonToolResult(startInfo);
+    } catch (error51) {
+      return errorToolResult(error51, "start_failed");
+    }
+  }
+);
+server.registerTool(
+  "subagent_collect",
+  {
+    title: "Collect Subagent Run Result",
+    description: "Collect the final run summary or interim progress for a run started with subagent_start. Accepts runId and/or runDir (plus outputDir to disambiguate) and returns the collectRun result: run locator, done flag, run-level status, full run summary when available (otherwise a minimal in-progress summary), per-task results, and a bounded recent-events window when recentEventsLimit is supplied. Use this for final collection or progress polling; it does not start new work. On failure returns a structured error object with isError=true.",
+    inputSchema: {
+      runId: external_exports.string().optional().describe("Run id to collect. When omitted, runDir is used to locate the run."),
+      runDir: external_exports.string().optional().describe("Run directory to collect. Used directly, or to resolve a runId."),
+      workspace: external_exports.string().optional().describe("Workspace used to resolve the default outputDir when runDir and outputDir are not supplied. Defaults to the MCP server working directory."),
+      outputDir: external_exports.string().optional().describe("Output directory to resolve a runId when runDir is not supplied. Defaults to <workspace>/.subagent-runs."),
+      recentEventsLimit: external_exports.number().int().positive().max(1e3).optional().describe("Maximum number of recent event entries (from events.jsonl) to return. Omitted means no recent-events window is requested.")
+    },
+    outputSchema: collectOutputShape
+  },
+  async (input) => {
+    try {
+      const collected = await collectRun(input);
+      return jsonToolResult(collected);
+    } catch (error51) {
+      return errorToolResult(error51, "collect_failed");
     }
   }
 );

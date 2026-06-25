@@ -76,7 +76,7 @@ that launch the package bin update with `git pull` and `npm link` instead.
 
 Scope:
 
-- Updates the MCP **process/tool layer** (`src/`, the four tools, scheduler,
+- Updates the MCP **process/tool layer** (`src/`, the runtime tools, scheduler,
   claude-runner, result normalizer).
 - Does **not** update Skill or plugin metadata — those live in the marketplace
   bundle.

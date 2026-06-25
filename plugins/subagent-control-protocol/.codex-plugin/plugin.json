@@ -1,6 +1,6 @@
 {
   "name": "subagent-control-protocol",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Codex plugin for orchestrating structured, verifiable Claude Code subagents through a bundled MCP runtime.",
   "author": {
     "name": "Bohaohao"

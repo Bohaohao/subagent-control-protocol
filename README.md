@@ -39,7 +39,7 @@ Run artifacts  (.subagent-runs/<ts>/...)
 - **Codex controller** — decomposes work, dispatches tasks, reads results, integrates and ships.
 - **SCP Codex plugin** — the installable product: marketplace metadata, plugin manifest, Skill, MCP registration, bundled runtime, and update bootstrap.
 - **Skill workflow layer** — governs *when* and *how* to delegate: read-only review, non-overlapping implementation, verification, single-vs-many delegation.
-- **MCP runtime/tool layer** — the plugin's execution layer. It manages Claude child processes, bounded concurrency, timeouts, cancellation, and structured output. Exposes four tools.
+- **MCP runtime/tool layer** — the plugin's execution layer. It manages Claude child processes, bounded concurrency, timeouts, cancellation, and structured output. Exposes six tools: blocking run, async start/collect, status, and cancel.
 - **Claude Code CLI executor** — runs each bounded task and returns JSON matching the result contract.
 
 分层关系：Codex 总控负责拆分与集成；SCP 作为 Codex 插件被安装；插件里的 Skill 层定义何时/如何委派；插件里的 MCP runtime 负责进程、并发、超时与结构化输出；Claude Code CLI 作为执行者运行局部任务并返回符合结果契约的 JSON。
@@ -59,7 +59,8 @@ and the MCP runtime together. Two install paths are supported:
 Either way the installed plugin gives Codex:
 
 - the **execution tool runtime**, so Codex can call `subagent_run_task`,
-  `subagent_run_many`, `subagent_status`, and `subagent_cancel`;
+  `subagent_run_many`, `subagent_start`, `subagent_collect`,
+  `subagent_status`, and `subagent_cancel`;
 - the **orchestrator Skill**, so Codex knows when to create a `todoList`, when
   work can run in parallel, and when to add the two read-only review agents.
 
@@ -314,9 +315,45 @@ In plain language: Codex plans the work, runs independent implementers in parall
 Two distinct layers — keep them separate:
 
 - **Controller decision layer (Codex + Skill)** — owns *what* to do: the `todoList`, parallelization classification, dispatch order, agent prompts, file ownership, and the final accept/integrate/ship decision. This is where concurrency and routing are decided; the user does not state them.
-- **Plugin MCP runtime (`src/server.mjs`)** — owns *how* it runs: Claude child-process lifecycle, bounded concurrency enforcement, timeouts, cancellation, logging, structured output, and run archival. It exposes the four tools but does not decide decomposition.
+- **Plugin MCP runtime (`src/server.mjs`)** — owns *how* it runs: Claude child-process lifecycle, bounded concurrency enforcement, timeouts, cancellation, logging, structured output, and run archival. It exposes the runtime tools but does not decide decomposition.
 
 两层要分开看：决策层（总控 + Skill）负责“做什么”——`todoList`、可并行分类、派发顺序、prompt、文件归属与最终决策，并发与路由在此决定，用户无需指定；插件内置 MCP runtime 负责“怎么跑”——进程生命周期、有界并发、超时、取消、日志、结构化输出与归档，只暴露工具，不参与拆分。
+
+## Async Start / Collect Workflow
+
+The plugin exposes both **blocking run tools** and a **non-blocking async pair**:
+
+- **Blocking execution.** `subagent_run_task` and `subagent_run_many` start Claude work and wait for the final `{ runSummary, results }`.
+- **Async start.** `subagent_start` accepts the same dependency-aware plan shape as `subagent_run_many`, starts the run in the background, and returns immediately with `runId`, `runDir`, `outputDir`, `workspace`, `status`, `startedAt`, `totalTasks`, `concurrency`, and `dryRun`. Keep `runDir` or `outputDir` with `runId`; that is the most reliable later collect handle.
+- **Progress polling.** `subagent_status` reads the run directory while work is in flight and returns active processes, compact `taskEvents`, latest heartbeat/phase timestamps, and a bounded `recentEvents` window.
+- **Async collect.** `subagent_collect` accepts `runId` and/or `runDir` (plus optional `workspace`/`outputDir`) and returns `{ done, status, summary }`. When `done` is `false`, the payload is progress-shaped; when `done` is `true`, `summary` and `runSummary` are the final `run-summary.json`, with per-task results also available as `results` and `summary.tasks`.
+
+You do not start a raw server process or manage MCP plumbing yourself. The Codex plugin bundles its MCP runtime; in normal plugin use, Codex just calls these tools.
+
+Concise controller pattern:
+
+1. **Decompose** the task into a `todoList` of concrete, bounded steps with explicit, non-overlapping file ownership.
+2. **Start parallel eligible tasks** with `subagent_start` for long-running work, or `subagent_run_many` when the controller wants to block until completion. Use `dependsOn` for ordered steps.
+3. **Poll status/events** with `subagent_status` instead of scanning `stdout.txt`/`stderr.txt`.
+4. **Collect the final summary** with `subagent_collect`; cross-check `filesChanged` for collisions and route any fix to the single owning agent.
+5. **Run two read-only reviews** after implementation: one software-engineering review and one real-user-perspective review. Codex integrates their findings and makes the final accept/hold/ship decision.
+
+插件同时暴露**阻塞式执行工具**和**非阻塞异步工具对**：
+
+- **阻塞执行。** `subagent_run_task` 与 `subagent_run_many` 会启动 Claude 任务，并等待最终 `{ runSummary, results }`。
+- **异步启动。** `subagent_start` 接收与 `subagent_run_many` 相同的依赖感知计划，在后台启动运行，并立刻返回 `runId`、`runDir`、`outputDir`、`workspace`、`status`、`startedAt`、`totalTasks`、`concurrency`、`dryRun`。请保留 `runDir`，或同时保留 `outputDir` 与 `runId`，这是后续 collect 最稳的定位信息。
+- **进度轮询。** `subagent_status` 可在任务运行中读取运行目录，返回活动进程、紧凑的 `taskEvents`、最新心跳/阶段时间，以及有界的 `recentEvents` 窗口。
+- **异步收集。** `subagent_collect` 接收 `runId` 和/或 `runDir`（也可带 `workspace`/`outputDir`），返回 `{ done, status, summary }`。`done` 为 `false` 时是进度态；`done` 为 `true` 时，`summary` 与 `runSummary` 就是最终 `run-summary.json`，每个子任务结果也会出现在 `results` 与 `summary.tasks`。
+
+你无需自行启动原始 server 进程或管理 MCP 管线。Codex 插件已经内置 MCP runtime，正常使用时 Codex 直接调用这些工具即可。
+
+总控精简范式：
+
+1. **拆解** 任务为 `todoList`——具体、有界、且文件归属互不重叠的步骤。
+2. **启动可并行任务**——长任务优先用 `subagent_start`；如果总控希望阻塞等待完成，则用 `subagent_run_many`。有依赖的步骤用 `dependsOn` 排序。
+3. **轮询状态/事件**——用 `subagent_status` 读取最新心跳/阶段与 `recentEvents`，而非扫描 `stdout.txt`/`stderr.txt`。
+4. **收集最终摘要**——用 `subagent_collect` 获取最终 summary；交叉比对 `filesChanged` 检查冲突，把修复定向给失败文件的唯一所有者。
+5. **跑两个只读评审**——实现完成后，派发一个“软件工程评审”子 agent 和一个“真实用户视角评审”子 agent。总控整合其结论后做最终的接受/搁置/发布决策。
 
 ## Usage — Prompt Examples
 
@@ -346,10 +383,12 @@ Most users should stop at the minimal prompts above. The examples below are opti
 | --- | --- |
 | `subagent_run_task` | Run one bounded Claude subagent task; returns `{ runSummary, results, result }` where `result` is the single task. |
 | `subagent_run_many` | Run a dependency-aware plan with bounded concurrency; returns `{ runSummary, results }` in input order. Use for parallel review/verification or non-overlapping implementation. |
+| `subagent_start` | Start a dependency-aware plan in the background and return immediately with `runId`/`runDir`; use for long-running async orchestration. |
+| `subagent_collect` | Collect interim progress or the final `run-summary.json` for a run started by `subagent_start`; returns `{ done, status, summary }`. |
 | `subagent_status` | Read one `run-summary.json` (mode `single`) or list recent runs from an output dir (mode `list`); both include the active-process list. In single mode it also surfaces event-aware fields when present — latest heartbeat/phase, a per-task `taskEvents` summary, and a bounded `recentEvents` window (pass `recentEventsLimit` to cap it). Prefer this over reading raw `stdout.txt`/`stderr.txt`. |
 | `subagent_cancel` | Best-effort cancellation for active Claude child processes in this server process. Requires `runId`. |
 
-Every tool returns a shared envelope: `{ ok: true, ...payload }` on success, or `{ ok: false, error: { code, message, stack? } }` (with `isError: true`) on failure. All run tools include `runSummary` in `structuredContent`.
+Every tool returns a shared envelope: `{ ok: true, ...payload }` on success, or `{ ok: false, error: { code, message, stack? } }` (with `isError: true`) on failure. Blocking run tools include `runSummary` in `structuredContent`; async start returns a run locator, and async collect returns progress or the final summary.
 
 ## Result Contract
 

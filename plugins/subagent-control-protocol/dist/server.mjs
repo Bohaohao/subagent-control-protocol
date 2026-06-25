@@ -31347,6 +31347,7 @@ import { fileURLToPath } from "node:url";
 init_define_SCP_RESULT_SCHEMA_INLINE();
 import { spawn as spawn2 } from "node:child_process";
 import fs3 from "node:fs/promises";
+import { statSync } from "node:fs";
 import os3 from "node:os";
 import path2 from "node:path";
 
@@ -31691,13 +31692,23 @@ async function collectDescendants(pid, seen = /* @__PURE__ */ new Set()) {
 var activeProcesses = /* @__PURE__ */ new Map();
 function listActiveProcesses(runId) {
   const records = runId ? [...activeProcesses.values()].filter((record2) => record2.runId === runId) : [...activeProcesses.values()];
-  return records.map(({ runId: runId2, taskId, title, pid, startedAt }) => ({
-    runId: runId2,
-    taskId,
-    title,
-    pid,
-    startedAt
-  }));
+  return records.map(({ runId: runId2, taskId, title, pid, startedAt, eventLogPath }) => {
+    const record2 = {
+      runId: runId2,
+      taskId,
+      title,
+      pid,
+      startedAt,
+      eventLogPath
+    };
+    if (eventLogPath) {
+      try {
+        record2.lastEventAt = statSync(eventLogPath).mtime.toISOString();
+      } catch {
+      }
+    }
+    return record2;
+  });
 }
 async function cancelActiveRun(runId) {
   const targets = [...activeProcesses.values()].filter((record2) => record2.runId === runId);
@@ -31710,6 +31721,7 @@ async function cancelActiveRun(runId) {
 async function runClaudeTask(task, context) {
   const taskDir = path2.join(context.runDir, "tasks", task.id);
   await fs3.mkdir(taskDir, { recursive: true });
+  const eventLogPath = path2.join(taskDir, "events.jsonl");
   const startedAt = (/* @__PURE__ */ new Date()).toISOString();
   const prompt = buildPrompt(task);
   const command = buildClaudeCommand(
@@ -31719,6 +31731,15 @@ async function runClaudeTask(task, context) {
     context.claudeBaseArgs,
     [taskDir]
   );
+  await appendEvent(eventLogPath, {
+    type: "task_started",
+    runId: context.runId,
+    taskId: task.id,
+    title: task.title,
+    kind: task.kind,
+    dryRun: Boolean(context.dryRun),
+    command: command.display
+  });
   await fs3.writeFile(path2.join(taskDir, "prompt.md"), prompt, "utf8");
   await writeJson(path2.join(taskDir, "task.json"), {
     id: task.id,
@@ -31727,16 +31748,19 @@ async function runClaudeTask(task, context) {
     dependsOn: task.dependsOn,
     command: command.display,
     timeoutMs: task.timeoutMs,
-    cwd: task.workspace
+    cwd: task.workspace,
+    eventLogPath
   });
   if (context.dryRun) {
+    const endedAt2 = (/* @__PURE__ */ new Date()).toISOString();
     const dryResult = {
       id: task.id,
       title: task.title,
       status: "completed",
       startedAt,
-      endedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      endedAt: endedAt2,
       taskDir,
+      eventLogPath,
       exitCode: 0,
       timedOut: false,
       cancelled: false,
@@ -31756,6 +31780,14 @@ async function runClaudeTask(task, context) {
       command: command.display
     };
     await writeJson(path2.join(taskDir, "result.json"), dryResult);
+    await appendEvent(eventLogPath, {
+      type: "task_completed",
+      runId: context.runId,
+      taskId: task.id,
+      status: "completed",
+      exitCode: 0,
+      durationMs: Date.parse(endedAt2) - Date.parse(startedAt)
+    });
     return dryResult;
   }
   const execution = await spawnClaude({
@@ -31766,6 +31798,7 @@ async function runClaudeTask(task, context) {
     cwd: task.workspace,
     timeoutMs: task.timeoutMs,
     taskDir,
+    eventLogPath,
     runId: context.runId,
     taskId: task.id,
     title: task.title,
@@ -31788,6 +31821,7 @@ async function runClaudeTask(task, context) {
     startedAt,
     endedAt,
     taskDir,
+    eventLogPath,
     exitCode: execution.exitCode,
     signal: execution.signal,
     timedOut: execution.timedOut,
@@ -31800,6 +31834,16 @@ async function runClaudeTask(task, context) {
     command: command.display
   };
   await writeJson(path2.join(taskDir, "result.json"), result);
+  await appendEvent(eventLogPath, {
+    type: terminalEventType(status),
+    runId: context.runId,
+    taskId: task.id,
+    status,
+    exitCode: execution.exitCode,
+    timedOut: Boolean(execution.timedOut),
+    cancelled: Boolean(execution.cancelled),
+    durationMs: result.durationMs
+  });
   return result;
 }
 async function resolveClaudeExecutable(preferred) {
@@ -31866,6 +31910,13 @@ Controller rules:
 - Be precise about files changed, commands run, verification evidence, risks, and next steps.
 - Always include tokenUsageSummary as a string. If exact token counts are not visible to you while composing the result, say that clearly and do not invent exact counts.
 
+Task event logging:
+- The environment exposes SCP_EVENT_LOG (path to a JSONL file), SCP_RUN_ID, SCP_TASK_ID, and SCP_TASK_DIR.
+- As you work, append one compact JSON object per line to the file at SCP_EVENT_LOG to report progress. Each line must be valid JSON on its own.
+- Emit events for these runtime milestones: phase_started (when beginning a distinct phase), heartbeat (periodic alive signal during long work), checkpoint (after a meaningful unit of progress), blocked (when waiting on something external or unable to proceed), command_started (before running a verification/shell command, include a short label), command_finished (after it, include exit code and pass/fail).
+- Keep events compact: include a short \`type\`, an ISO timestamp, and a brief text field. Never include full logs, diffs, file contents, or code in events. A label or one-line summary is enough.
+- Event logging is best-effort and must never replace the required JSON result; if writing to SCP_EVENT_LOG fails, continue the task and still return the JSON result.
+
 Task:
 ${task.prompt}
 `;
@@ -31931,7 +31982,14 @@ function spawnClaude(options) {
     const stdinPrompt = options.prompt.length > 2e4 ? `Read and follow the full task prompt saved at ${path2.join(options.taskDir, "prompt.md")}. Return only JSON that matches the requested schema.` : options.prompt;
     const child = spawn2(options.executable, options.args, {
       cwd: options.cwd,
-      env: { ...process.env, ...options.env || {} },
+      env: {
+        ...process.env,
+        ...options.env || {},
+        SCP_EVENT_LOG: options.eventLogPath,
+        SCP_RUN_ID: options.runId,
+        SCP_TASK_ID: options.taskId,
+        SCP_TASK_DIR: options.taskDir
+      },
       shell: options.shell ?? false,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true
@@ -31949,9 +32007,17 @@ function spawnClaude(options) {
       title: options.title,
       pid: child.pid,
       startedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      cancelled: false
+      cancelled: false,
+      eventLogPath: options.eventLogPath
     };
     activeProcesses.set(activeKey, record2);
+    appendEvent(options.eventLogPath, {
+      type: "process_started",
+      runId: options.runId,
+      taskId: options.taskId,
+      pid: child.pid
+    }).catch(() => {
+    });
     const finish = async ({ exitCode, signal }) => {
       if (settled) return;
       settled = true;
@@ -31960,6 +32026,16 @@ function spawnClaude(options) {
       activeProcesses.delete(activeKey);
       await fs3.writeFile(stdoutPath, stdout, "utf8");
       await fs3.writeFile(stderrPath, stderr, "utf8");
+      await appendEvent(options.eventLogPath, {
+        type: "process_exited",
+        runId: options.runId,
+        taskId: options.taskId,
+        pid: child.pid,
+        exitCode,
+        signal: signal || null,
+        timedOut,
+        cancelled: Boolean(record2.cancelled)
+      });
       resolve({ stdout, stderr, exitCode, signal, timedOut, cancelled: Boolean(record2.cancelled) });
     };
     let killGraceTimeout = null;
@@ -32018,6 +32094,26 @@ async function resolveTargetFromCmd(cmdPath) {
 function quoteArg(value) {
   if (/^[A-Za-z0-9._:/\\=-]+$/.test(value)) return value;
   return JSON.stringify(value);
+}
+function terminalEventType(status) {
+  if (status === "completed") return "task_completed";
+  if (status === "partial") return "task_partial";
+  if (status === "blocked") return "task_blocked";
+  if (status === "timed_out") return "task_timed_out";
+  if (status === "cancelled") return "task_cancelled";
+  return "task_failed";
+}
+async function appendEvent(eventLogPath, event) {
+  if (!eventLogPath) return;
+  try {
+    const timestamp = event?.timestamp || event?.ts || (/* @__PURE__ */ new Date()).toISOString();
+    const normalized = { ...event, timestamp };
+    delete normalized.ts;
+    const line = JSON.stringify(normalized);
+    await fs3.appendFile(eventLogPath, `${line}
+`, "utf8");
+  } catch {
+  }
 }
 
 // src/core/scheduler.mjs
@@ -32088,13 +32184,26 @@ async function runTaskPlan(plan, options = {}) {
     activeRuns.delete(runId);
   }
 }
-async function loadRunStatus({ runDir, outputDir, limit = 20 } = {}) {
+var DEFAULT_RECENT_EVENTS_LIMIT = 20;
+async function loadRunStatus({ runDir, outputDir, limit = 20, recentEventsLimit } = {}) {
   if (runDir) {
     const resolved = path3.resolve(runDir);
     const summaryPath = path3.join(resolved, "run-summary.json");
-    const summary = await readJson(summaryPath);
+    let summary;
+    try {
+      summary = await readJson(summaryPath);
+    } catch {
+      summary = await readRunInputFallback(resolved);
+    }
     const runId = summary?.runId || path3.basename(resolved);
-    return { mode: "single", summary, active: listActiveProcesses(runId) };
+    const eventView = await buildRunEventView(summary, resolved, { recentEventsLimit });
+    return {
+      mode: "single",
+      summary,
+      active: listActiveProcesses(runId),
+      recentEvents: eventView.recentEvents,
+      taskEvents: eventView.taskEvents
+    };
   }
   const baseDir = path3.resolve(outputDir || path3.join(process.cwd(), ".subagent-runs"));
   let entries = [];
@@ -32112,7 +32221,178 @@ async function loadRunStatus({ runDir, outputDir, limit = 20 } = {}) {
       runs.push({ runDir: dir, status: "incomplete_or_unreadable" });
     }
   }
-  return { mode: "list", outputDir: baseDir, runs, active: listActiveProcesses() };
+  return {
+    mode: "list",
+    outputDir: baseDir,
+    runs,
+    active: listActiveProcesses(),
+    statusEvents: { runsWithEventLogs: countRunsWithEventLogs(runs) }
+  };
+}
+async function readEventsFile(eventsPath) {
+  let text;
+  try {
+    text = await fs4.readFile(eventsPath, "utf8");
+  } catch {
+    return { exists: false, events: [] };
+  }
+  const events = [];
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const event = JSON.parse(trimmed);
+      if (event && typeof event === "object" && !Array.isArray(event)) events.push(event);
+    } catch {
+    }
+  }
+  return { exists: true, events };
+}
+async function collectTaskEntries(summary, runDir) {
+  const entries = [];
+  if (summary && Array.isArray(summary.tasks)) {
+    for (const task of summary.tasks) {
+      if (!task) continue;
+      entries.push({ id: task.id, taskDir: task.taskDir, eventLogPath: task.eventLogPath });
+    }
+  }
+  if (entries.length === 0 && runDir) {
+    const tasksDir = path3.join(runDir, "tasks");
+    let names = [];
+    try {
+      names = await fs4.readdir(tasksDir, { withFileTypes: true });
+    } catch {
+      return entries;
+    }
+    for (const ent of names) {
+      if (!ent.isDirectory()) continue;
+      entries.push({ id: ent.name, taskDir: path3.join(tasksDir, ent.name), eventLogPath: null });
+    }
+  }
+  return entries;
+}
+function summarizeTaskEvents(events, eventLogPath) {
+  const orderedEvents = events.slice().sort((a, b) => compareTimestamp(eventTimestamp(a), eventTimestamp(b)));
+  const summary = {
+    eventLogPath,
+    eventCount: events.length,
+    lastEventAt: void 0,
+    lastHeartbeatAt: void 0,
+    phase: void 0,
+    blockedReason: void 0,
+    latestSummary: void 0
+  };
+  for (const event of orderedEvents) {
+    if (!event || typeof event !== "object") continue;
+    const { type } = event;
+    const timestamp = eventTimestamp(event);
+    if (timestamp) summary.lastEventAt = timestamp;
+    if (type === "heartbeat") {
+      summary.lastHeartbeatAt = timestamp || summary.lastHeartbeatAt;
+    }
+    if (type === "phase_started") {
+      summary.phase = event.phase || event.phaseName || event.message || summary.phase;
+    }
+    if (type === "blocked" || type === "block" || type === "stuck") {
+      summary.blockedReason = event.reason || event.message || summary.blockedReason;
+    }
+    if (type === "checkpoint" || type === "heartbeat" || type === "message" || type === "summary") {
+      const text = event.summary || event.message;
+      if (text) summary.latestSummary = text;
+    }
+  }
+  return summary;
+}
+function trimEvent(event) {
+  if (!event || typeof event !== "object") return null;
+  const out = {};
+  for (const key of [
+    "type",
+    "timestamp",
+    "taskId",
+    "phase",
+    "message",
+    "summary",
+    "reason",
+    "label",
+    "command",
+    "status",
+    "exitCode",
+    "signal",
+    "timedOut",
+    "cancelled",
+    "durationMs",
+    "pid",
+    "title",
+    "kind",
+    "dryRun"
+  ]) {
+    if (event[key] !== void 0) out[key] = event[key];
+  }
+  if (out.timestamp === void 0 && event.ts !== void 0) out.timestamp = event.ts;
+  return out;
+}
+function eventTimestamp(event) {
+  return event?.timestamp || event?.ts;
+}
+function compareTimestamp(a, b) {
+  if (a && b) return a < b ? -1 : a > b ? 1 : 0;
+  if (a) return -1;
+  if (b) return 1;
+  return 0;
+}
+async function buildRunEventView(summary, runDir, options = {}) {
+  const requestedLimit = Number(options.recentEventsLimit) || DEFAULT_RECENT_EVENTS_LIMIT;
+  const recentLimit = Math.max(0, Math.min(1e3, requestedLimit));
+  const taskEntries = await collectTaskEntries(summary, runDir);
+  const taskEvents = [];
+  const allEvents = [];
+  const tasksById = /* @__PURE__ */ new Map();
+  if (summary && Array.isArray(summary.tasks)) {
+    for (const task of summary.tasks) {
+      if (task?.id) tasksById.set(task.id, task);
+    }
+  }
+  for (const entry of taskEntries) {
+    const eventsPath = entry.eventLogPath || (entry.taskDir ? path3.join(entry.taskDir, "events.jsonl") : null);
+    if (!eventsPath) continue;
+    const { events } = await readEventsFile(eventsPath);
+    const taskSummary = summarizeTaskEvents(events, eventsPath);
+    taskEvents.push({ taskId: entry.id, ...taskSummary });
+    const taskResult = tasksById.get(entry.id);
+    if (taskResult) {
+      taskResult.events = taskSummary;
+      taskResult.eventLogPath = taskResult.eventLogPath || taskSummary.eventLogPath;
+      if (taskSummary.lastEventAt) taskResult.lastEventAt = taskSummary.lastEventAt;
+      if (taskSummary.lastHeartbeatAt) taskResult.lastHeartbeatAt = taskSummary.lastHeartbeatAt;
+    }
+    for (const event of events) allEvents.push(event);
+  }
+  const sorted = allEvents.slice().sort((a, b) => compareTimestamp(a?.timestamp || a?.ts, b?.timestamp || b?.ts));
+  const recentEvents = sorted.slice(-recentLimit).map(trimEvent).filter(Boolean);
+  return { recentEvents, taskEvents };
+}
+async function readRunInputFallback(runDir) {
+  try {
+    const input = await readJson(path3.join(runDir, "run-input.json"));
+    return {
+      runId: path3.basename(runDir),
+      runDir,
+      tasks: (input.tasks || []).map((task) => ({
+        id: task.id,
+        taskDir: path3.join(runDir, "tasks", task.id)
+      }))
+    };
+  } catch {
+    return { runId: path3.basename(runDir), runDir, tasks: [] };
+  }
+}
+function countRunsWithEventLogs(runs) {
+  let count = 0;
+  for (const run of runs) {
+    if (run && Array.isArray(run.tasks) && run.tasks.some((task) => task && task.eventLogPath)) count++;
+  }
+  return count;
 }
 async function cancelRun(runId) {
   const cancellation = activeRuns.get(runId);
@@ -32318,7 +32598,7 @@ function firstNonEmptyArray(...values) {
 // src/server.mjs
 var server = new McpServer({
   name: "subagent-control-protocol",
-  version: "0.3.0",
+  version: "0.3.2",
   instructions: [
     "Use this MCP server when Codex should act as the controller and delegate bounded work to Claude Code CLI subagents.",
     "Codex is the controller: it owns decomposition, dependency analysis, parallelism, and review; this MCP server is only the execution layer and never decides decomposition or parallelism on its own.",
@@ -32327,7 +32607,8 @@ var server = new McpServer({
     "As a controller-side convention enforced by the orchestrator Skill, after implementation always add two read-only review subagents: one reviewing from a software-engineering perspective (correctness, structure, tests, risks) and one from a real-user perspective (does it actually solve the user request, is it usable). Reviewers must not edit files.",
     "Use subagent_run_task for one task, or subagent_run_many for dependency-aware parallel plans.",
     "Always inspect structuredContent.runSummary before treating delegated work as complete.",
-    "Run directories contain controller-readable prompts, raw outputs, normalized task results, and run-summary.json."
+    "Run directories contain controller-readable prompts, raw outputs, normalized task results, run-summary.json, and may include an events.jsonl append-only log of lifecycle/heartbeat events emitted by the runner.",
+    "Prefer subagent_status for structured run status and event summaries (including heartbeats) rather than reading raw stdout/stderr files by default; subagent_status accepts recentEventsLimit to bound the number of recent event entries returned."
   ].join(" ")
 });
 var permissionMode = external_exports.enum([
@@ -32393,14 +32674,20 @@ var taskResultShape = {
   parsed: external_exports.any().optional().describe("Normalized agent-result object when the CLI produced parseable JSON."),
   rawParsed: external_exports.any().optional(),
   usage: external_exports.any().optional(),
-  measuredUsageSummary: external_exports.string().optional()
+  measuredUsageSummary: external_exports.string().optional(),
+  eventLogPath: external_exports.string().optional().describe("Path to the task/run events.jsonl log when event tracking is enabled; absent for legacy runs."),
+  lastHeartbeatAt: external_exports.string().optional().describe("ISO timestamp of the most recent runner heartbeat, when available."),
+  lastEventAt: external_exports.string().optional().describe("ISO timestamp of the most recent recorded lifecycle event, when available."),
+  events: external_exports.any().optional().describe("Compact per-task event summary attached by subagent_status in single-run mode.")
 };
 var activeProcessShape = {
   runId: external_exports.string(),
   taskId: external_exports.string(),
   title: external_exports.string(),
   pid: external_exports.number().int(),
-  startedAt: external_exports.string()
+  startedAt: external_exports.string(),
+  eventLogPath: external_exports.string().optional().describe("Path to this active task events.jsonl log, when event tracking is enabled."),
+  lastEventAt: external_exports.string().optional().describe("ISO timestamp of the most recent lifecycle event for the active process, when available.")
 };
 var errorDetailShape = {
   code: external_exports.string(),
@@ -32443,7 +32730,10 @@ var statusOutputShape = {
   ok: external_exports.boolean(),
   mode: external_exports.enum(["single", "list"]).optional(),
   active: external_exports.array(external_exports.object(activeProcessShape)).optional(),
-  summary: external_exports.object(runSummaryShape).optional().describe('Present when mode is "single".'),
+  summary: external_exports.record(external_exports.string(), external_exports.any()).optional().describe('Present when mode is "single"; may be a full run-summary.json or a minimal in-progress summary before run-summary.json exists.'),
+  recentEvents: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe("Bounded, trimmed recent events from task events.jsonl files in single-run mode."),
+  taskEvents: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe("Per-task compact event summaries in single-run mode."),
+  statusEvents: external_exports.record(external_exports.string(), external_exports.any()).optional().describe("Compact event metadata in list mode."),
   outputDir: external_exports.string().optional().describe('Present when mode is "list".'),
   runs: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe('Present when mode is "list"; entries are run summaries or { runDir, status: "incomplete_or_unreadable" }.'),
   error: external_exports.object(errorDetailShape).optional()
@@ -32518,11 +32808,12 @@ server.registerTool(
   "subagent_status",
   {
     title: "Read Subagent Run Status",
-    description: 'Read one run-summary.json (mode "single") or list recent run summaries from an output directory (mode "list"). Both modes include the active-process list.',
+    description: 'Read one run-summary.json (mode "single") or list recent run summaries from an output directory (mode "list"). Both modes include the active-process list. When event tracking is available, results include heartbeat timestamps (lastHeartbeatAt/lastEventAt) and, in single mode, recent event summaries bounded by recentEventsLimit. Prefer this tool for structured status and events over reading raw stdout/stderr files directly.',
     inputSchema: {
       runDir: external_exports.string().optional(),
       outputDir: external_exports.string().optional(),
-      limit: external_exports.number().int().positive().max(100).optional()
+      limit: external_exports.number().int().positive().max(100).optional(),
+      recentEventsLimit: external_exports.number().int().positive().max(1e3).optional().describe("Maximum number of recent event entries (from events.jsonl) to summarize in single mode. Safe maximum is 1000; omitted means no event summaries are requested beyond defaults.")
     },
     outputSchema: statusOutputShape
   },

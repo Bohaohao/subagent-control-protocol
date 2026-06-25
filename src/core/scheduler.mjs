@@ -82,14 +82,34 @@ export async function runTaskPlan(plan, options = {}) {
   }
 }
 
-export async function loadRunStatus({ runDir, outputDir, limit = 20 } = {}) {
+// Upper bound on how many recent events we surface in a single-run status
+// payload. Keeps the response small enough for Codex to inspect without
+// dumping entire event logs.
+const DEFAULT_RECENT_EVENTS_LIMIT = 20
+
+export async function loadRunStatus({ runDir, outputDir, limit = 20, recentEventsLimit } = {}) {
   if (runDir) {
     const resolved = path.resolve(runDir)
     const summaryPath = path.join(resolved, 'run-summary.json')
-    const summary = await readJson(summaryPath)
+    let summary
+    try {
+      summary = await readJson(summaryPath)
+    } catch {
+      // The run may still be in progress (no run-summary.json yet). Fall back to
+      // run-input.json so callers can still see task dirs; event enrichment
+      // degrades gracefully when files are absent.
+      summary = await readRunInputFallback(resolved)
+    }
     // Report only this run's active processes, not every run the server knows about.
     const runId = summary?.runId || path.basename(resolved)
-    return { mode: 'single', summary, active: listActiveProcesses(runId) }
+    const eventView = await buildRunEventView(summary, resolved, { recentEventsLimit })
+    return {
+      mode: 'single',
+      summary,
+      active: listActiveProcesses(runId),
+      recentEvents: eventView.recentEvents,
+      taskEvents: eventView.taskEvents,
+    }
   }
 
   const baseDir = path.resolve(outputDir || path.join(process.cwd(), '.subagent-runs'))
@@ -116,7 +136,217 @@ export async function loadRunStatus({ runDir, outputDir, limit = 20 } = {}) {
     }
   }
 
-  return { mode: 'list', outputDir: baseDir, runs, active: listActiveProcesses() }
+  // List mode stays compact: we do NOT open every task's events.jsonl. The only
+  // event signal we surface is derived from data already present in each run
+  // summary (task results may carry eventLogPath), so this is cheap.
+  return {
+    mode: 'list',
+    outputDir: baseDir,
+    runs,
+    active: listActiveProcesses(),
+    statusEvents: { runsWithEventLogs: countRunsWithEventLogs(runs) },
+  }
+}
+
+// Read a task's events.jsonl safely. Tolerates a missing file (returns no
+// events) and skips any malformed/unparseable lines instead of throwing.
+async function readEventsFile(eventsPath) {
+  let text
+  try {
+    text = await fs.readFile(eventsPath, 'utf8')
+  } catch {
+    return { exists: false, events: [] }
+  }
+  const events = []
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    try {
+      const event = JSON.parse(trimmed)
+      if (event && typeof event === 'object' && !Array.isArray(event)) events.push(event)
+    } catch {
+      // Malformed line — skip it rather than failing the whole status read.
+    }
+  }
+  return { exists: true, events }
+}
+
+// Build the list of task entries to inspect for events. Prefers the task
+// results already in the run summary (which carry taskDir / eventLogPath); when
+// no summary is available (run still in progress), scans runDir/tasks so we can
+// still report live heartbeats/phases.
+async function collectTaskEntries(summary, runDir) {
+  const entries = []
+  if (summary && Array.isArray(summary.tasks)) {
+    for (const task of summary.tasks) {
+      if (!task) continue
+      entries.push({ id: task.id, taskDir: task.taskDir, eventLogPath: task.eventLogPath })
+    }
+  }
+  if (entries.length === 0 && runDir) {
+    const tasksDir = path.join(runDir, 'tasks')
+    let names = []
+    try {
+      names = await fs.readdir(tasksDir, { withFileTypes: true })
+    } catch {
+      return entries
+    }
+    for (const ent of names) {
+      if (!ent.isDirectory()) continue
+      entries.push({ id: ent.name, taskDir: path.join(tasksDir, ent.name), eventLogPath: null })
+    }
+  }
+  return entries
+}
+
+// Reduce a task's raw event list to a compact summary. Events are assumed
+// append-ordered (chronological), so "latest" means last-seen in file order.
+function summarizeTaskEvents(events, eventLogPath) {
+  const orderedEvents = events
+    .slice()
+    .sort((a, b) => compareTimestamp(eventTimestamp(a), eventTimestamp(b)))
+  const summary = {
+    eventLogPath,
+    eventCount: events.length,
+    lastEventAt: undefined,
+    lastHeartbeatAt: undefined,
+    phase: undefined,
+    blockedReason: undefined,
+    latestSummary: undefined,
+  }
+  for (const event of orderedEvents) {
+    if (!event || typeof event !== 'object') continue
+    const { type } = event
+    const timestamp = eventTimestamp(event)
+    if (timestamp) summary.lastEventAt = timestamp
+    if (type === 'heartbeat') {
+      summary.lastHeartbeatAt = timestamp || summary.lastHeartbeatAt
+    }
+    if (type === 'phase_started') {
+      summary.phase = event.phase || event.phaseName || event.message || summary.phase
+    }
+    if (type === 'blocked' || type === 'block' || type === 'stuck') {
+      summary.blockedReason = event.reason || event.message || summary.blockedReason
+    }
+    if (type === 'checkpoint' || type === 'heartbeat' || type === 'message' || type === 'summary') {
+      const text = event.summary || event.message
+      if (text) summary.latestSummary = text
+    }
+  }
+  return summary
+}
+
+// Trim an event down to a small whitelist of fields so recentEvents doesn't
+// echo large payloads back to the caller.
+function trimEvent(event) {
+  if (!event || typeof event !== 'object') return null
+  const out = {}
+  for (const key of [
+    'type',
+    'timestamp',
+    'taskId',
+    'phase',
+    'message',
+    'summary',
+    'reason',
+    'label',
+    'command',
+    'status',
+    'exitCode',
+    'signal',
+    'timedOut',
+    'cancelled',
+    'durationMs',
+    'pid',
+    'title',
+    'kind',
+    'dryRun',
+  ]) {
+    if (event[key] !== undefined) out[key] = event[key]
+  }
+  if (out.timestamp === undefined && event.ts !== undefined) out.timestamp = event.ts
+  return out
+}
+
+function eventTimestamp(event) {
+  return event?.timestamp || event?.ts
+}
+
+function compareTimestamp(a, b) {
+  if (a && b) return a < b ? -1 : a > b ? 1 : 0
+  if (a) return -1
+  if (b) return 1
+  return 0
+}
+
+// Build the event-aware view for a single run: a per-task summary attached to
+// each task result, a flat taskEvents list, and a small merged recentEvents
+// window across all tasks. Reads each task's events.jsonl once.
+async function buildRunEventView(summary, runDir, options = {}) {
+  const requestedLimit = Number(options.recentEventsLimit) || DEFAULT_RECENT_EVENTS_LIMIT
+  const recentLimit = Math.max(0, Math.min(1000, requestedLimit))
+  const taskEntries = await collectTaskEntries(summary, runDir)
+  const taskEvents = []
+  const allEvents = []
+  const tasksById = new Map()
+  if (summary && Array.isArray(summary.tasks)) {
+    for (const task of summary.tasks) {
+      if (task?.id) tasksById.set(task.id, task)
+    }
+  }
+
+  for (const entry of taskEntries) {
+    const eventsPath = entry.eventLogPath || (entry.taskDir ? path.join(entry.taskDir, 'events.jsonl') : null)
+    if (!eventsPath) continue
+    const { events } = await readEventsFile(eventsPath)
+    const taskSummary = summarizeTaskEvents(events, eventsPath)
+    taskEvents.push({ taskId: entry.id, ...taskSummary })
+    // Attach the same summary to the in-memory task result so callers reading
+    // summary.tasks see last heartbeat/phase inline. run-summary.json on disk
+    // is untouched.
+    const taskResult = tasksById.get(entry.id)
+    if (taskResult) {
+      taskResult.events = taskSummary
+      taskResult.eventLogPath = taskResult.eventLogPath || taskSummary.eventLogPath
+      if (taskSummary.lastEventAt) taskResult.lastEventAt = taskSummary.lastEventAt
+      if (taskSummary.lastHeartbeatAt) taskResult.lastHeartbeatAt = taskSummary.lastHeartbeatAt
+    }
+    for (const event of events) allEvents.push(event)
+  }
+
+  const sorted = allEvents
+    .slice()
+    .sort((a, b) => compareTimestamp(a?.timestamp || a?.ts, b?.timestamp || b?.ts))
+  const recentEvents = sorted.slice(-recentLimit).map(trimEvent).filter(Boolean)
+  return { recentEvents, taskEvents }
+}
+
+// When run-summary.json is missing (run in progress), reconstruct a minimal
+// summary from run-input.json so event enrichment can still locate task dirs.
+async function readRunInputFallback(runDir) {
+  try {
+    const input = await readJson(path.join(runDir, 'run-input.json'))
+    return {
+      runId: path.basename(runDir),
+      runDir,
+      tasks: (input.tasks || []).map((task) => ({
+        id: task.id,
+        taskDir: path.join(runDir, 'tasks', task.id),
+      })),
+    }
+  } catch {
+    return { runId: path.basename(runDir), runDir, tasks: [] }
+  }
+}
+
+// Cheap list-mode signal: count runs whose task results already advertise an
+// eventLogPath. Does not open any events.jsonl files.
+function countRunsWithEventLogs(runs) {
+  let count = 0
+  for (const run of runs) {
+    if (run && Array.isArray(run.tasks) && run.tasks.some((task) => task && task.eventLogPath)) count++
+  }
+  return count
 }
 
 export async function cancelRun(runId) {

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
+import { statSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
@@ -18,13 +19,26 @@ export function listActiveProcesses(runId) {
   const records = runId
     ? [...activeProcesses.values()].filter((record) => record.runId === runId)
     : [...activeProcesses.values()]
-  return records.map(({ runId, taskId, title, pid, startedAt }) => ({
-    runId,
-    taskId,
-    title,
-    pid,
-    startedAt,
-  }))
+  return records.map(({ runId, taskId, title, pid, startedAt, eventLogPath }) => {
+    const record = {
+      runId,
+      taskId,
+      title,
+      pid,
+      startedAt,
+      eventLogPath,
+    }
+    // Derive last activity cheaply from the event log's mtime; never read the
+    // (potentially large) log contents in this hot path.
+    if (eventLogPath) {
+      try {
+        record.lastEventAt = statSync(eventLogPath).mtime.toISOString()
+      } catch {
+        // Event log may not exist yet (spawn not finished); skip silently.
+      }
+    }
+    return record
+  })
 }
 
 export async function cancelActiveRun(runId) {
@@ -40,6 +54,7 @@ export async function runClaudeTask(task, context) {
   const taskDir = path.join(context.runDir, 'tasks', task.id)
   await fs.mkdir(taskDir, { recursive: true })
 
+  const eventLogPath = path.join(taskDir, 'events.jsonl')
   const startedAt = new Date().toISOString()
   const prompt = buildPrompt(task)
   const command = buildClaudeCommand(
@@ -50,6 +65,16 @@ export async function runClaudeTask(task, context) {
     [taskDir],
   )
 
+  await appendEvent(eventLogPath, {
+    type: 'task_started',
+    runId: context.runId,
+    taskId: task.id,
+    title: task.title,
+    kind: task.kind,
+    dryRun: Boolean(context.dryRun),
+    command: command.display,
+  })
+
   await fs.writeFile(path.join(taskDir, 'prompt.md'), prompt, 'utf8')
   await writeJson(path.join(taskDir, 'task.json'), {
     id: task.id,
@@ -59,16 +84,19 @@ export async function runClaudeTask(task, context) {
     command: command.display,
     timeoutMs: task.timeoutMs,
     cwd: task.workspace,
+    eventLogPath,
   })
 
   if (context.dryRun) {
+    const endedAt = new Date().toISOString()
     const dryResult = {
       id: task.id,
       title: task.title,
       status: 'completed',
       startedAt,
-      endedAt: new Date().toISOString(),
+      endedAt,
       taskDir,
+      eventLogPath,
       exitCode: 0,
       timedOut: false,
       cancelled: false,
@@ -88,6 +116,14 @@ export async function runClaudeTask(task, context) {
       command: command.display,
     }
     await writeJson(path.join(taskDir, 'result.json'), dryResult)
+    await appendEvent(eventLogPath, {
+      type: 'task_completed',
+      runId: context.runId,
+      taskId: task.id,
+      status: 'completed',
+      exitCode: 0,
+      durationMs: Date.parse(endedAt) - Date.parse(startedAt),
+    })
     return dryResult
   }
 
@@ -99,6 +135,7 @@ export async function runClaudeTask(task, context) {
     cwd: task.workspace,
     timeoutMs: task.timeoutMs,
     taskDir,
+    eventLogPath,
     runId: context.runId,
     taskId: task.id,
     title: task.title,
@@ -123,6 +160,7 @@ export async function runClaudeTask(task, context) {
     startedAt,
     endedAt,
     taskDir,
+    eventLogPath,
     exitCode: execution.exitCode,
     signal: execution.signal,
     timedOut: execution.timedOut,
@@ -136,6 +174,16 @@ export async function runClaudeTask(task, context) {
   }
 
   await writeJson(path.join(taskDir, 'result.json'), result)
+  await appendEvent(eventLogPath, {
+    type: terminalEventType(status),
+    runId: context.runId,
+    taskId: task.id,
+    status,
+    exitCode: execution.exitCode,
+    timedOut: Boolean(execution.timedOut),
+    cancelled: Boolean(execution.cancelled),
+    durationMs: result.durationMs,
+  })
   return result
 }
 
@@ -217,6 +265,13 @@ Controller rules:
 - Be precise about files changed, commands run, verification evidence, risks, and next steps.
 - Always include tokenUsageSummary as a string. If exact token counts are not visible to you while composing the result, say that clearly and do not invent exact counts.
 
+Task event logging:
+- The environment exposes SCP_EVENT_LOG (path to a JSONL file), SCP_RUN_ID, SCP_TASK_ID, and SCP_TASK_DIR.
+- As you work, append one compact JSON object per line to the file at SCP_EVENT_LOG to report progress. Each line must be valid JSON on its own.
+- Emit events for these runtime milestones: phase_started (when beginning a distinct phase), heartbeat (periodic alive signal during long work), checkpoint (after a meaningful unit of progress), blocked (when waiting on something external or unable to proceed), command_started (before running a verification/shell command, include a short label), command_finished (after it, include exit code and pass/fail).
+- Keep events compact: include a short \`type\`, an ISO timestamp, and a brief text field. Never include full logs, diffs, file contents, or code in events. A label or one-line summary is enough.
+- Event logging is best-effort and must never replace the required JSON result; if writing to SCP_EVENT_LOG fails, continue the task and still return the JSON result.
+
 Task:
 ${task.prompt}
 `
@@ -292,7 +347,14 @@ function spawnClaude(options) {
 
     const child = spawn(options.executable, options.args, {
       cwd: options.cwd,
-      env: { ...process.env, ...(options.env || {}) },
+      env: {
+        ...process.env,
+        ...(options.env || {}),
+        SCP_EVENT_LOG: options.eventLogPath,
+        SCP_RUN_ID: options.runId,
+        SCP_TASK_ID: options.taskId,
+        SCP_TASK_DIR: options.taskDir,
+      },
       shell: options.shell ?? false,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
@@ -313,8 +375,19 @@ function spawnClaude(options) {
       pid: child.pid,
       startedAt: new Date().toISOString(),
       cancelled: false,
+      eventLogPath: options.eventLogPath,
     }
     activeProcesses.set(activeKey, record)
+
+    // process_started is runtime-owned; pid is known once spawn returns.
+    appendEvent(options.eventLogPath, {
+      type: 'process_started',
+      runId: options.runId,
+      taskId: options.taskId,
+      pid: child.pid,
+    }).catch(() => {
+      // best-effort: never break the run over event logging
+    })
 
     const finish = async ({ exitCode, signal }) => {
       if (settled) return
@@ -324,6 +397,16 @@ function spawnClaude(options) {
       activeProcesses.delete(activeKey)
       await fs.writeFile(stdoutPath, stdout, 'utf8')
       await fs.writeFile(stderrPath, stderr, 'utf8')
+      await appendEvent(options.eventLogPath, {
+        type: 'process_exited',
+        runId: options.runId,
+        taskId: options.taskId,
+        pid: child.pid,
+        exitCode,
+        signal: signal || null,
+        timedOut,
+        cancelled: Boolean(record.cancelled),
+      })
       resolve({ stdout, stderr, exitCode, signal, timedOut, cancelled: Boolean(record.cancelled) })
     }
 
@@ -398,4 +481,28 @@ async function resolveTargetFromCmd(cmdPath) {
 function quoteArg(value) {
   if (/^[A-Za-z0-9._:/\\=-]+$/.test(value)) return value
   return JSON.stringify(value)
+}
+
+function terminalEventType(status) {
+  if (status === 'completed') return 'task_completed'
+  if (status === 'partial') return 'task_partial'
+  if (status === 'blocked') return 'task_blocked'
+  if (status === 'timed_out') return 'task_timed_out'
+  if (status === 'cancelled') return 'task_cancelled'
+  return 'task_failed'
+}
+
+// Append one compact JSON object as a line to the per-task event log. Best
+// effort: event logging must never break a run, so failures are swallowed.
+async function appendEvent(eventLogPath, event) {
+  if (!eventLogPath) return
+  try {
+    const timestamp = event?.timestamp || event?.ts || new Date().toISOString()
+    const normalized = { ...event, timestamp }
+    delete normalized.ts
+    const line = JSON.stringify(normalized)
+    await fs.appendFile(eventLogPath, `${line}\n`, 'utf8')
+  } catch {
+    // ignore — event logging is best-effort
+  }
 }

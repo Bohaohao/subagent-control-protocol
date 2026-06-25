@@ -6,7 +6,7 @@ import { cancelRun, loadRunStatus, runTaskPlan } from './core/scheduler.mjs'
 
 const server = new McpServer({
   name: 'subagent-control-protocol',
-  version: '0.3.0',
+  version: '0.3.2',
   instructions: [
     'Use this MCP server when Codex should act as the controller and delegate bounded work to Claude Code CLI subagents.',
     'Codex is the controller: it owns decomposition, dependency analysis, parallelism, and review; this MCP server is only the execution layer and never decides decomposition or parallelism on its own.',
@@ -15,7 +15,8 @@ const server = new McpServer({
     'As a controller-side convention enforced by the orchestrator Skill, after implementation always add two read-only review subagents: one reviewing from a software-engineering perspective (correctness, structure, tests, risks) and one from a real-user perspective (does it actually solve the user request, is it usable). Reviewers must not edit files.',
     'Use subagent_run_task for one task, or subagent_run_many for dependency-aware parallel plans.',
     'Always inspect structuredContent.runSummary before treating delegated work as complete.',
-    'Run directories contain controller-readable prompts, raw outputs, normalized task results, and run-summary.json.',
+    'Run directories contain controller-readable prompts, raw outputs, normalized task results, run-summary.json, and may include an events.jsonl append-only log of lifecycle/heartbeat events emitted by the runner.',
+    'Prefer subagent_status for structured run status and event summaries (including heartbeats) rather than reading raw stdout/stderr files by default; subagent_status accepts recentEventsLimit to bound the number of recent event entries returned.',
   ].join(' '),
 })
 
@@ -99,6 +100,10 @@ const taskResultShape = {
   rawParsed: z.any().optional(),
   usage: z.any().optional(),
   measuredUsageSummary: z.string().optional(),
+  eventLogPath: z.string().optional().describe('Path to the task/run events.jsonl log when event tracking is enabled; absent for legacy runs.'),
+  lastHeartbeatAt: z.string().optional().describe('ISO timestamp of the most recent runner heartbeat, when available.'),
+  lastEventAt: z.string().optional().describe('ISO timestamp of the most recent recorded lifecycle event, when available.'),
+  events: z.any().optional().describe('Compact per-task event summary attached by subagent_status in single-run mode.'),
 }
 
 const activeProcessShape = {
@@ -107,6 +112,8 @@ const activeProcessShape = {
   title: z.string(),
   pid: z.number().int(),
   startedAt: z.string(),
+  eventLogPath: z.string().optional().describe('Path to this active task events.jsonl log, when event tracking is enabled.'),
+  lastEventAt: z.string().optional().describe('ISO timestamp of the most recent lifecycle event for the active process, when available.'),
 }
 
 // Machine-readable error detail returned inside the error envelope. Present on
@@ -167,7 +174,10 @@ const statusOutputShape = {
   ok: z.boolean(),
   mode: z.enum(['single', 'list']).optional(),
   active: z.array(z.object(activeProcessShape)).optional(),
-  summary: z.object(runSummaryShape).optional().describe('Present when mode is "single".'),
+  summary: z.record(z.string(), z.any()).optional().describe('Present when mode is "single"; may be a full run-summary.json or a minimal in-progress summary before run-summary.json exists.'),
+  recentEvents: z.array(z.record(z.string(), z.any())).optional().describe('Bounded, trimmed recent events from task events.jsonl files in single-run mode.'),
+  taskEvents: z.array(z.record(z.string(), z.any())).optional().describe('Per-task compact event summaries in single-run mode.'),
+  statusEvents: z.record(z.string(), z.any()).optional().describe('Compact event metadata in list mode.'),
   outputDir: z.string().optional().describe('Present when mode is "list".'),
   runs: z
     .array(z.record(z.string(), z.any()))
@@ -249,11 +259,12 @@ server.registerTool(
   'subagent_status',
   {
     title: 'Read Subagent Run Status',
-    description: 'Read one run-summary.json (mode "single") or list recent run summaries from an output directory (mode "list"). Both modes include the active-process list.',
+    description: 'Read one run-summary.json (mode "single") or list recent run summaries from an output directory (mode "list"). Both modes include the active-process list. When event tracking is available, results include heartbeat timestamps (lastHeartbeatAt/lastEventAt) and, in single mode, recent event summaries bounded by recentEventsLimit. Prefer this tool for structured status and events over reading raw stdout/stderr files directly.',
     inputSchema: {
       runDir: z.string().optional(),
       outputDir: z.string().optional(),
       limit: z.number().int().positive().max(100).optional(),
+      recentEventsLimit: z.number().int().positive().max(1000).optional().describe('Maximum number of recent event entries (from events.jsonl) to summarize in single mode. Safe maximum is 1000; omitted means no event summaries are requested beyond defaults.'),
     },
     outputSchema: statusOutputShape,
   },

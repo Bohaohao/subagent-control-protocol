@@ -346,7 +346,7 @@ Most users should stop at the minimal prompts above. The examples below are opti
 | --- | --- |
 | `subagent_run_task` | Run one bounded Claude subagent task; returns `{ runSummary, results, result }` where `result` is the single task. |
 | `subagent_run_many` | Run a dependency-aware plan with bounded concurrency; returns `{ runSummary, results }` in input order. Use for parallel review/verification or non-overlapping implementation. |
-| `subagent_status` | Read one `run-summary.json` (mode `single`) or list recent runs from an output dir (mode `list`); both include the active-process list. |
+| `subagent_status` | Read one `run-summary.json` (mode `single`) or list recent runs from an output dir (mode `list`); both include the active-process list. In single mode it also surfaces event-aware fields when present — latest heartbeat/phase, a per-task `taskEvents` summary, and a bounded `recentEvents` window (pass `recentEventsLimit` to cap it). Prefer this over reading raw `stdout.txt`/`stderr.txt`. |
 | `subagent_cancel` | Best-effort cancellation for active Claude child processes in this server process. Requires `runId`. |
 
 Every tool returns a shared envelope: `{ ok: true, ...payload }` on success, or `{ ok: false, error: { code, message, stack? } }` (with `isError: true`) on failure. All run tools include `runSummary` in `structuredContent`.
@@ -388,14 +388,30 @@ Each run writes a timestamped directory:
         stderr.txt
         raw-output.json
         result.json
+        events.jsonl
 ```
+
+`tasks/<id>/events.jsonl` is an append-only log of structured lifecycle events emitted by the runner — task start/exit, `phase_started`, periodic `heartbeat`, `checkpoint`, `blocked`, and `command_started`/`command_finished`. It is a structured event stream, **not** a capture of the subagent's full `stdout`/`stderr`. Read it (or, better, ask `subagent_status` for the derived `taskEvents`/`recentEvents` summary) to track live progress, latest phase, and recent heartbeats without touching process logs.
+
+Event entries are compact JSON objects. Common fields are:
+
+- `type` — event type, such as `task_started`, `phase_started`, `heartbeat`, `checkpoint`, `blocked`, `command_started`, `command_finished`, `process_exited`, or `task_completed`.
+- `timestamp` — ISO timestamp.
+- `taskId` — subagent task id.
+- `message` / `summary` / `reason` — short human-readable context.
+- `phase` — current phase for `phase_started`.
+- `label` / `command` — short command label for command events; do not include full command output.
+- `status` / `exitCode` / `durationMs` — small terminal or command outcome fields when relevant.
+
+The event log is best-effort observability. Both the runtime and the Claude subprocess may append to it, so malformed or interleaved lines are ignored by `subagent_status`; full stdout/stderr remain artifact-only.
 
 Read order for controllers:
 
 1. `run-summary.json` — overall run status.
 2. `tasks/<id>/result.json` — one normalized task result.
-3. `tasks/<id>/raw-output.json` — only when debugging Claude's original envelope.
-4. `stdout.txt` / `stderr.txt` — only for process-level diagnosis.
+3. `tasks/<id>/events.jsonl` (or `subagent_status`) — latest heartbeat/phase and recent events for progress tracking.
+4. `tasks/<id>/raw-output.json` — only when debugging Claude's original envelope.
+5. `stdout.txt` / `stderr.txt` — artifact-only, for process-level diagnosis. Do not read these by default; prefer `subagent_status` and `events.jsonl` for observability.
 
 ## Safety Notes
 

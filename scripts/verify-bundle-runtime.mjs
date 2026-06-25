@@ -199,7 +199,16 @@ async function checkRuntimeSmoke(entryPath, label, env = {}) {
     } else {
       const tools = (toolsResponse.result && toolsResponse.result.tools) || []
       const names = tools.map((t) => t.name)
-      for (const expected of ['subagent_run_task', 'subagent_run_many', 'subagent_status']) {
+      for (const expected of [
+        'subagent_run_task',
+        'subagent_run_many',
+        'subagent_start',
+        'subagent_collect',
+        'subagent_watch',
+        'subagent_cleanup',
+        'subagent_status',
+        'subagent_cancel',
+      ]) {
         if (!names.includes(expected)) {
           fail(`tools/list missing expected tool: ${expected}`)
         }

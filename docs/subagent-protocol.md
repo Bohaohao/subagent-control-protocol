@@ -38,6 +38,11 @@ status may also be `skipped`, `timed_out`, or `cancelled`. When the Claude CLI
 reports measured usage, the controller records `usage` plus
 `measuredUsageSummary` alongside Claude's own `tokenUsageSummary`.
 
+The runtime also repairs common Claude output variants before normalization:
+fenced JSON, prose-wrapped JSON, Claude CLI `{ type: "result", result: "..." }`
+envelopes, and common alternate field names. Repair diagnostics are kept on the
+normalized result when repair happened; exact token counts are never fabricated.
+
 ## todoList-first orchestration (hard workflow)
 
 The controller must not dispatch any task until it has produced a `todoList`.
@@ -83,6 +88,37 @@ not improvised after the fact.
 
 This workflow supersedes ad-hoc decomposition. If no `todoList` exists, the
 controller is not ready to dispatch.
+
+## Event, health, and cleanup protocol
+
+Each task owns `tasks/<id>/events.jsonl`, an append-only JSONL event stream. The
+runtime writes task/process lifecycle events and a periodic runtime `heartbeat`
+while the Claude process is active. The Claude subprocess is also asked to add
+compact `phase_started`, `checkpoint`, `blocked`, `command_started`, and
+`command_finished` events.
+
+Events must stay small. They should include `type`, `timestamp`, `runId`,
+`taskId`, and one-line context fields such as `summary`, `reason`, `phase`,
+`label`, or `command`. Heartbeats should include an incrementing `sequence`.
+Optional controller hints include `progress`, `etaSeconds`, `severity`, and
+`needsController`.
+
+Controllers should prefer these tools over raw log reads:
+
+- `subagent_status` for compact per-task event summaries and recent events.
+- `subagent_watch` for heartbeat-derived `health`, `controllerSummary`, and
+  `suggestedAction`. Use `compact: true` for high-frequency polling.
+- `subagent_collect` for interim progress and final results from async runs.
+- `subagent_cleanup` for dry-run-first retention cleanup of run artifacts.
+
+For token-conscious polling, set `includeControllerSummary: false` on
+`subagent_status`/`subagent_collect`, or `compact: true` on `subagent_watch`.
+Cleanup defaults are conservative: `keepFailed: true` and
+`includeIncomplete: false`.
+
+Malformed event lines are ignored rather than crashing status collection. Full
+`stdout.txt` and `stderr.txt` are artifact-only and should be read only for
+diagnosis.
 
 ## Recommended task split
 

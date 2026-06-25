@@ -6,6 +6,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { normalizeAgentResult, parseAgentResult } from '../src/core/result-normalizer.mjs'
+import { validateRunFileOwnership } from '../src/core/ownership.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const packageRoot = path.resolve(__dirname, '..')
@@ -56,6 +58,8 @@ try {
   assert.ok(tools.tools.some((tool) => tool.name === 'subagent_run_task'))
   assert.ok(tools.tools.some((tool) => tool.name === 'subagent_run_many'))
   assert.ok(tools.tools.some((tool) => tool.name === 'subagent_status'))
+  assert.ok(tools.tools.some((tool) => tool.name === 'subagent_watch'))
+  assert.ok(tools.tools.some((tool) => tool.name === 'subagent_cleanup'))
 
   const run = await client.callTool({
     name: 'subagent_run_task',
@@ -76,7 +80,7 @@ try {
   // write and return an eventLogPath pointing at the run's events.jsonl. The
   // implementation may surface event summaries on the single task result, on
   // the run-summary task entries, or under a taskEvents / summary.tasks
-  // collection — look in all of those rather than assuming one location.
+  // collection - look in all of those rather than assuming one location.
   const eventLogPath = findEventLogPath(
     run.structuredContent.runSummary,
     run.structuredContent.result,
@@ -120,7 +124,7 @@ try {
 
   // subagent_status exposes event-aware fields (latest heartbeat / phase /
   // recent events) when present. They are optional for legacy or incomplete
-  // runs, so only assert their shape — never their presence. Event summaries
+  // runs, so only assert their shape - never their presence. Event summaries
   // may live on the task result, a top-level taskEvents list, or a recentEvents
   // window; tolerate whichever the implementation provides.
   const statusTask = status.summary?.tasks?.[0] || {}
@@ -313,6 +317,55 @@ try {
   })
   assert.equal(asyncStatus.structuredContent.mode, 'single')
   assert.equal(asyncStatus.structuredContent.summary.runId, asyncRunId)
+  assert.ok(asyncStatus.structuredContent.health, 'subagent_status must expose heartbeat health')
+  assert.ok(asyncStatus.structuredContent.controllerSummary, 'subagent_status must expose controllerSummary')
+
+  const watch = await client.callTool({
+    name: 'subagent_watch',
+    arguments: { runId: asyncRunId, recentEventsLimit: 5, compact: true },
+  })
+  assert.equal(watch.structuredContent.ok, true, 'subagent_watch must report ok=true')
+  assert.equal(watch.structuredContent.runId, asyncRunId)
+  assert.ok(watch.structuredContent.health, 'subagent_watch must expose health')
+  assert.ok(watch.structuredContent.controllerSummary, 'subagent_watch must expose controllerSummary')
+  assert.equal(typeof watch.structuredContent.suggestedAction, 'string')
+  assert.equal(
+    watch.structuredContent.summary,
+    undefined,
+    'compact subagent_watch should not echo the full summary payload',
+  )
+
+  const cleanup = await client.callTool({
+    name: 'subagent_cleanup',
+    arguments: {
+      outputDir: asyncOutputDir,
+      dryRun: true,
+      maxRuns: 0,
+      includeIncomplete: true,
+      keepFailed: false,
+    },
+  })
+  assert.equal(cleanup.structuredContent.ok, true, 'subagent_cleanup must report ok=true')
+  assert.equal(cleanup.structuredContent.dryRun, true, 'cleanup smoke must be dry-run')
+  assert.ok(
+    await fs.access(asyncRunDir).then(() => true).catch(() => false),
+    'cleanup dry-run must not delete the async run directory',
+  )
+
+  const fenced = 'Result follows:\\n```json\\n{\"status\":\"completed\",\"summary\":\"repaired\",\"filesChanged\":[],\"commandsRun\":[],\"verification\":[{\"check\":\"repair\",\"status\":\"passed\"}],\"risks\":[],\"nextSteps\":[],\"tokenUsageSummary\":\"Exact token usage was not visible.\"}\\n```'
+  const repaired = normalizeAgentResult(parseAgentResult({ type: 'result', result: fenced }))
+  assert.equal(repaired.status, 'completed', 'fenced JSON result should be repaired to completed')
+  assert.equal(repaired.summary, 'repaired')
+
+  const ownership = validateRunFileOwnership({
+    workspace: tempDir,
+    tasks: [{ id: 'review-only', kind: 'review', prompt: 'Read only.' }],
+    results: [{ id: 'review-only', parsed: { filesChanged: [{ path: 'src/example.mjs' }] } }],
+  })
+  assert.ok(
+    ownership.violations.some((entry) => entry.type === 'read_only_task_edit'),
+    'ownership validation must inspect parsed.filesChanged from normalized task results',
+  )
 
   console.log(
     JSON.stringify(

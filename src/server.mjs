@@ -2,11 +2,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { cancelRun, collectRun, loadRunStatus, runTaskPlan, startTaskPlan } from './core/scheduler.mjs'
+import { executeCleanup, planCleanup } from './core/cleanup.mjs'
+import { cancelRun, collectRun, loadRunStatus, runTaskPlan, startTaskPlan, watchRun } from './core/scheduler.mjs'
 
 const server = new McpServer({
   name: 'subagent-control-protocol',
-  version: '0.3.3',
+  version: '0.3.4',
   instructions: [
     'Use this MCP server when Codex should act as the controller and delegate bounded work to Claude Code CLI subagents.',
     'Codex is the controller: it owns decomposition, dependency analysis, parallelism, and review; this MCP server is only the execution layer and never decides decomposition or parallelism on its own.',
@@ -18,6 +19,8 @@ const server = new McpServer({
     'Run directories contain controller-readable prompts, raw outputs, normalized task results, run-summary.json, and may include an events.jsonl append-only log of lifecycle/heartbeat events emitted by the runner.',
     'Prefer subagent_status for structured run status and event summaries (including heartbeats) rather than reading raw stdout/stderr files by default; subagent_status accepts recentEventsLimit to bound the number of recent event entries returned.',
     'For long-running plans, use subagent_start to launch a dependency-aware plan in the background and return immediately with start info (runId/runDir), then use subagent_collect to fetch the final run summary or interim progress; subagent_start/subagent_collect are the async counterpart to the blocking subagent_run_many.',
+    'Use subagent_watch for controller-friendly health checks over running plans, including stalled/slow heartbeat detection and suggested controller actions.',
+    'Use subagent_cleanup to safely plan or execute retention cleanup for run artifact directories; dryRun defaults to true.',
   ].join(' '),
 })
 
@@ -147,6 +150,8 @@ const runSummaryShape = {
   cancelledTasks: z.number().int(),
   timedOutTasks: z.number().int(),
   tasks: z.array(z.object(taskResultShape)),
+  ownershipViolations: z.array(z.record(z.string(), z.any())).optional(),
+  ownershipWarnings: z.array(z.record(z.string(), z.any())).optional(),
 }
 
 // Shared envelope for every tool. `ok` discriminates success (true, with the
@@ -178,6 +183,8 @@ const statusOutputShape = {
   summary: z.record(z.string(), z.any()).optional().describe('Present when mode is "single"; may be a full run-summary.json or a minimal in-progress summary before run-summary.json exists.'),
   recentEvents: z.array(z.record(z.string(), z.any())).optional().describe('Bounded, trimmed recent events from task events.jsonl files in single-run mode.'),
   taskEvents: z.array(z.record(z.string(), z.any())).optional().describe('Per-task compact event summaries in single-run mode.'),
+  health: z.record(z.string(), z.any()).optional().describe('Run health summary derived from events/heartbeats.'),
+  controllerSummary: z.record(z.string(), z.any()).optional().describe('Compact controller-facing summary for decision making.'),
   statusEvents: z.record(z.string(), z.any()).optional().describe('Compact event metadata in list mode.'),
   outputDir: z.string().optional().describe('Present when mode is "list".'),
   runs: z
@@ -233,6 +240,28 @@ const collectOutputShape = {
   recentEvents: z.array(z.record(z.string(), z.any())).optional().describe('Bounded recent event window from task events.jsonl files, when requested.'),
   taskEvents: z.array(z.record(z.string(), z.any())).optional().describe('Per-task compact event summaries for in-progress runs.'),
   active: z.array(z.record(z.string(), z.any())).optional().describe('Active Claude child processes for this run, when known.'),
+  health: z.record(z.string(), z.any()).optional().describe('Run health summary derived from events/heartbeats.'),
+  controllerSummary: z.record(z.string(), z.any()).optional().describe('Compact controller-facing summary for decision making.'),
+  error: z.object(errorDetailShape).optional(),
+}
+
+const watchOutputShape = {
+  ...collectOutputShape,
+  suggestedAction: z.string().optional().describe('Controller action hint based on current run health.'),
+}
+
+const cleanupOutputShape = {
+  ok: z.boolean(),
+  outputDir: z.string().optional(),
+  dryRun: z.boolean().optional(),
+  options: z.record(z.string(), z.any()).optional(),
+  plan: z.record(z.string(), z.any()).optional(),
+  runs: z.array(z.record(z.string(), z.any())).optional(),
+  summary: z.record(z.string(), z.any()).optional(),
+  deletedRuns: z.array(z.record(z.string(), z.any())).optional(),
+  keptRuns: z.array(z.record(z.string(), z.any())).optional(),
+  reclaimedBytes: z.number().optional(),
+  errors: z.array(z.record(z.string(), z.any())).optional(),
   error: z.object(errorDetailShape).optional(),
 }
 
@@ -338,6 +367,9 @@ server.registerTool(
       workspace: z.string().optional().describe('Workspace used to resolve the default outputDir when runDir and outputDir are not supplied. Defaults to the MCP server working directory.'),
       outputDir: z.string().optional().describe('Output directory to resolve a runId when runDir is not supplied. Defaults to <workspace>/.subagent-runs.'),
       recentEventsLimit: z.number().int().positive().max(1000).optional().describe('Maximum number of recent event entries (from events.jsonl) to return. Omitted means no recent-events window is requested.'),
+      staleHeartbeatMs: z.number().int().positive().optional().describe('Heartbeat age threshold for stalled detection.'),
+      slowEventMs: z.number().int().positive().optional().describe('Event age threshold for slow detection.'),
+      includeControllerSummary: z.boolean().optional().describe('Set false to omit controllerSummary from polling responses.'),
     },
     outputSchema: collectOutputShape,
   },
@@ -352,6 +384,67 @@ server.registerTool(
 )
 
 server.registerTool(
+  'subagent_watch',
+  {
+    title: 'Watch Subagent Run Health',
+    description: 'Read controller-friendly health for a subagent run without starting new work. Accepts runId and/or runDir plus outputDir/workspace and returns collect/status data, heartbeat-derived health, a compact controllerSummary, and a suggestedAction such as continue_waiting or inspect_or_cancel_stalled_tasks.',
+    inputSchema: {
+      runId: z.string().optional().describe('Run id to watch. When omitted, runDir is used.'),
+      runDir: z.string().optional().describe('Run directory to watch.'),
+      workspace: z.string().optional().describe('Workspace used to resolve default outputDir when needed.'),
+      outputDir: z.string().optional().describe('Output directory to resolve runId when runDir is not supplied.'),
+      recentEventsLimit: z.number().int().positive().max(1000).optional(),
+      staleHeartbeatMs: z.number().int().positive().optional().describe('Heartbeat age threshold for stalled detection.'),
+      slowEventMs: z.number().int().positive().optional().describe('Event age threshold for slow detection.'),
+      compact: z.boolean().optional().describe('Return a compact health payload instead of the full collect-shaped response.'),
+      healthOnly: z.boolean().optional().describe('Alias for compact.'),
+      includeControllerSummary: z.boolean().optional().describe('Set false to omit controllerSummary from the watch payload.'),
+      includeTaskEvents: z.boolean().optional().describe('When compact is true, include per-task event summaries. Defaults to false.'),
+    },
+    outputSchema: watchOutputShape,
+  },
+  async (input) => {
+    try {
+      return jsonToolResult(await watchRun(input))
+    } catch (error) {
+      return errorToolResult(error, 'watch_failed')
+    }
+  },
+)
+
+server.registerTool(
+  'subagent_cleanup',
+  {
+    title: 'Clean Up Subagent Run Artifacts',
+    description: 'Plan or execute safe retention cleanup for subagent run artifact directories. dryRun defaults to true. Deletion is restricted to direct child run directories under outputDir.',
+    inputSchema: {
+      workspace: z.string().optional().describe('Workspace used to resolve default outputDir when outputDir is omitted.'),
+      outputDir: z.string().optional().describe('Run artifact output directory. Defaults to <workspace>/.subagent-runs.'),
+      dryRun: z.boolean().optional().describe('When true, only report what would be deleted. Defaults to true.'),
+      maxAgeDays: z.number().nonnegative().optional(),
+      maxRuns: z.number().int().nonnegative().optional(),
+      maxBytes: z.number().int().nonnegative().optional(),
+      keepFailed: z.boolean().optional().describe('Keep failed runs even when retention rules match. Defaults to true.'),
+      includeIncomplete: z.boolean().optional().describe('Allow incomplete/in-progress-looking runs to be deleted. Defaults to false.'),
+    },
+    outputSchema: cleanupOutputShape,
+  },
+  async (input) => {
+    try {
+      const outputDir = input.outputDir || `${input.workspace || process.cwd()}/.subagent-runs`
+      const options = { ...input, outputDir }
+      if (input.dryRun === false) {
+        return jsonToolResult(await executeCleanup(options))
+      }
+      const plan = await planCleanup({ ...options, dryRun: true })
+      return jsonToolResult({ ...plan, plan })
+    } catch (error) {
+      return errorToolResult(error, 'cleanup_failed')
+    }
+  },
+)
+
+server.registerTool(
   'subagent_status',
   {
     title: 'Read Subagent Run Status',
@@ -361,6 +454,9 @@ server.registerTool(
       outputDir: z.string().optional(),
       limit: z.number().int().positive().max(100).optional(),
       recentEventsLimit: z.number().int().positive().max(1000).optional().describe('Maximum number of recent event entries (from events.jsonl) to summarize in single mode. Safe maximum is 1000; omitted means no event summaries are requested beyond defaults.'),
+      staleHeartbeatMs: z.number().int().positive().optional().describe('Heartbeat age threshold for stalled detection.'),
+      slowEventMs: z.number().int().positive().optional().describe('Event age threshold for slow detection.'),
+      includeControllerSummary: z.boolean().optional().describe('Set false to omit controllerSummary from status responses.'),
     },
     outputSchema: statusOutputShape,
   },

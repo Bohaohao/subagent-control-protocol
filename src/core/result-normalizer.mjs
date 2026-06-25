@@ -1,11 +1,14 @@
 import { safeJsonParse } from './json.mjs'
+import { repairAgentResultCandidate } from './result-repair.mjs'
 
 export function parseAgentResult(raw) {
   if (!raw) return null
 
   if (typeof raw === 'string') {
     const parsed = safeJsonParse(raw)
-    return parsed.ok ? parseAgentResult(parsed.value) : null
+    if (parsed.ok) return parseAgentResult(parsed.value)
+    const repaired = repairAgentResultCandidate(raw)
+    return repaired.candidate ? attachRepairDiagnostics(repaired.candidate, repaired) : null
   }
 
   if (raw.structured_output) return parseAgentResult(raw.structured_output)
@@ -15,6 +18,8 @@ export function parseAgentResult(raw) {
     const result = typeof raw.result === 'string' ? raw.result.trim() : raw.result
     const parsed = safeJsonParse(result)
     if (parsed.ok) return parsed.value
+    const repaired = repairAgentResultCandidate(raw)
+    if (repaired.candidate) return attachRepairDiagnostics(repaired.candidate, repaired)
   }
 
   if (raw.message?.content) {
@@ -23,14 +28,22 @@ export function parseAgentResult(raw) {
       : String(raw.message.content)
     const parsed = safeJsonParse(text)
     if (parsed.ok) return parsed.value
+    const repaired = repairAgentResultCandidate(raw)
+    if (repaired.candidate) return attachRepairDiagnostics(repaired.candidate, repaired)
   }
+
+  const repaired = repairAgentResultCandidate(raw)
+  if (repaired.candidate) return attachRepairDiagnostics(repaired.candidate, repaired)
 
   return raw
 }
 
 export function normalizeAgentResult(value) {
   if (!value || typeof value !== 'object') {
-    return createFallbackResult(value)
+    const repaired = repairAgentResultCandidate(value)
+    return repaired.candidate
+      ? normalizeAgentResult(attachRepairDiagnostics(repaired.candidate, repaired))
+      : createFallbackResult(value)
   }
 
   const filesChanged = value.filesChanged || value.files_changed || value.changedFiles || value.changed_files || []
@@ -55,10 +68,24 @@ export function normalizeAgentResult(value) {
       nextSteps: Array.isArray(nextSteps) ? nextSteps.map(String) : [],
       tokenUsageSummary: normalizeTokenUsageSummary(value.tokenUsageSummary),
       metrics: normalizeMetrics(value.metrics),
+      ...(value.repair ? { repair: value.repair } : {}),
     }
   }
 
   return createFallbackResult(value)
+}
+
+function attachRepairDiagnostics(candidate, repair) {
+  if (!candidate || typeof candidate !== 'object') return candidate
+  if (!repair?.repaired) return candidate
+  return {
+    ...candidate,
+    repair: {
+      repaired: true,
+      repairs: repair.repairs || [],
+      errors: repair.errors || [],
+    },
+  }
 }
 
 export function normalizeStatus(execution, parsed) {

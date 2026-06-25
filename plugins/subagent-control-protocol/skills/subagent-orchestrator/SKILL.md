@@ -17,7 +17,7 @@ Whenever the user wants Claude subagents to perform **construction / implementat
 4. **Dispatch from the todoList.** Use the todoList as the basis for all subagent task dispatch.
 5. **Parallelize when eligible.** If two or more todos are parallel-eligible, dispatch them together via `subagent_run_many` (set `concurrency` and `dependsOn` accordingly) rather than sequentially.
 6. **Mandatory dual review after every construction run.** After implementation, dispatch **two read-only review Claude subagents**: one from a **software-engineering** perspective and one from a **real-user** perspective.
-7. **Review agents must not edit files.** Both review agents run read-only (`permissionMode` read-only) and are instructed not to edit anything.
+7. **Review agents must not edit files.** Both review agents are instructed not to edit anything. Use supported tool controls only: set `kind: "review"` and, when the MCP schema allows it, disallow edit tools such as `Edit`, `Write`, and `NotebookEdit`; do not invent an unsupported `permissionMode`.
 8. **Codex integrates.** Codex integrates implementation + both reviews, decides which review findings to accept, optionally performs targeted fixes (Codex itself, or a bounded implementer subagent with single-writer ownership), then summarizes the integrated result to the user.
 9. **No unsupported dispatch knobs.** Do not add parameters that are not part of the current MCP tool schema.
 
@@ -31,7 +31,7 @@ Codex MUST infer decomposition, the todoList, and parallelism from that — the 
 
 ## Layers (keep them distinct)
 
-- **MCP layer (tool/process):** `subagent_run_task`, `subagent_run_many`, `subagent_status`, `subagent_cancel`. These manage processes, concurrency, logging, and structured output.
+- **MCP layer (tool/process):** `subagent_run_task`, `subagent_run_many`, `subagent_start`, `subagent_collect`, `subagent_status`, `subagent_watch`, `subagent_cleanup`, `subagent_cancel`. These manage processes, concurrency, logging, heartbeat health, artifact cleanup, and structured output.
 - **Skill layer (workflow/orchestration):** this file. It governs task decomposition, ownership, verification, and how you decide between one-task vs. many-task delegation.
 
 Use the MCP tools to *execute*; use this Skill to *decide*.
@@ -40,8 +40,9 @@ Use the MCP tools to *execute*; use this Skill to *decide*.
 
 - **One bounded task → `subagent_run_task`.** A single review, implementation, research, or verification job.
 - **Multiple tasks, dependency chains, or parallel review/verification → `subagent_run_many`.** Set `concurrency` to bound parallelism; use `dependsOn` for ordering.
+- **Long-running parallel work → `subagent_start` + `subagent_watch` + `subagent_collect`.** Start in the background, monitor heartbeat health without reading raw logs, then collect final results.
 - **Decomposition or wiring check → `dryRun: true`.** Validate task plan shape and MCP wiring before spending a real run.
-- **Review / research / verification agents → read-only.** Set `permissionMode` accordingly and instruct them not to edit files.
+- **Review / research / verification agents → read-only behavior.** Instruct them not to edit files, use `kind: "review"`/`"verify"`/`"research"`, and disallow edit tools when available. Do not use unsupported schema fields.
 - **Implementation agents → non-overlapping file ownership.** Assign each implementer a disjoint set of files. Single-writer per file. Never let two subagents edit the same file concurrently.
 - **Codex stays the final integrator.** Subagents implement pieces; Codex merges, validates, and ships. Never let a subagent make the final merge/release decision.
 

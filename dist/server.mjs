@@ -3363,8 +3363,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path4) {
-      let input = path4;
+    function removeDotSegments(path7) {
+      let input = path7;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3617,8 +3617,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path4, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path4 && path4 !== "/" ? path4 : void 0;
+        const [path7, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path7 && path7 !== "/" ? path7 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -7057,12 +7057,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs5, exportName) {
+    function addFormats(ajv, list, fs7, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs5[f]);
+        ajv.addFormat(f, fs7[f]);
     }
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -7455,8 +7455,8 @@ function getErrorMap() {
 // node_modules/zod/v3/helpers/parseUtil.js
 init_define_SCP_RESULT_SCHEMA_INLINE();
 var makeIssue = (params) => {
-  const { data, path: path4, errorMaps, issueData } = params;
-  const fullPath = [...path4, ...issueData.path || []];
+  const { data, path: path7, errorMaps, issueData } = params;
+  const fullPath = [...path7, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7575,11 +7575,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path4, key) {
+  constructor(parent, value, path7, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path4;
+    this._path = path7;
     this._key = key;
   }
   get path() {
@@ -11512,10 +11512,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path4) {
-  if (!path4)
+function getElementAtPath(obj, path7) {
+  if (!path7)
     return obj;
-  return path4.reduce((acc, key) => acc?.[key], obj);
+  return path7.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -11924,11 +11924,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path4, issues) {
+function prefixIssues(path7, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path4);
+    iss.path.unshift(path7);
     return iss;
   });
 }
@@ -12075,16 +12075,16 @@ function flattenError(error51, mapper = (issue2) => issue2.message) {
 }
 function formatError(error51, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error52, path4 = []) => {
+  const processError = (error52, path7 = []) => {
     for (const issue2 of error52.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path4, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path7, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
       } else {
-        const fullpath = [...path4, ...issue2.path];
+        const fullpath = [...path7, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -12111,17 +12111,17 @@ function formatError(error51, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error51, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error52, path4 = []) => {
+  const processError = (error52, path7 = []) => {
     var _a3, _b;
     for (const issue2 of error52.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path4, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path7, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
       } else {
-        const fullpath = [...path4, ...issue2.path];
+        const fullpath = [...path7, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -12153,8 +12153,8 @@ function treeifyError(error51, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path4 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path4) {
+  const path7 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path7) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -13729,7 +13729,7 @@ function normalizeDef(def) {
 }
 function handleCatchall(proms, input, payload, ctx, def, inst) {
   const unrecognized = [];
-  const keySet = def.keySet;
+  const keySet2 = def.keySet;
   const _catchall = def.catchall._zod;
   const t = _catchall.def.type;
   const isOptionalIn = _catchall.optin === "optional";
@@ -13737,7 +13737,7 @@ function handleCatchall(proms, input, payload, ctx, def, inst) {
   for (const key in input) {
     if (key === "__proto__")
       continue;
-    if (keySet.has(key))
+    if (keySet2.has(key))
       continue;
     if (t === "never") {
       unrecognized.push(key);
@@ -25368,13 +25368,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path4 = ref.slice(1).split("/").filter(Boolean);
-  if (path4.length === 0) {
+  const path7 = ref.slice(1).split("/").filter(Boolean);
+  if (path7.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path4[0] === defsKey) {
-    const key = path4[1];
+  if (path7[0] === defsKey) {
+    const key = path7[1];
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -31337,22 +31337,10 @@ var StdioServerTransport = class {
   }
 };
 
-// src/core/scheduler.mjs
+// src/core/cleanup.mjs
 init_define_SCP_RESULT_SCHEMA_INLINE();
-import fs4 from "node:fs/promises";
-import path3 from "node:path";
-import { fileURLToPath } from "node:url";
-
-// src/core/claude-runner.mjs
-init_define_SCP_RESULT_SCHEMA_INLINE();
-import { spawn as spawn2 } from "node:child_process";
-import fs3 from "node:fs/promises";
-import { statSync } from "node:fs";
-import os3 from "node:os";
+import fs2 from "node:fs/promises";
 import path2 from "node:path";
-
-// src/core/result-normalizer.mjs
-init_define_SCP_RESULT_SCHEMA_INLINE();
 
 // src/core/json.mjs
 init_define_SCP_RESULT_SCHEMA_INLINE();
@@ -31393,12 +31381,650 @@ function parseLastJsonLine(text) {
   return { ok: false, error: "no parseable JSON line" };
 }
 
+// src/core/cleanup.mjs
+var RUN_SUMMARY_FILE = "run-summary.json";
+var DEFAULT_OPTIONS = {
+  dryRun: true,
+  maxAgeDays: null,
+  maxRuns: null,
+  maxBytes: null,
+  keepFailed: true,
+  includeIncomplete: false
+};
+var MS_PER_DAY = 24 * 60 * 60 * 1e3;
+function normalizeOptions(options = {}) {
+  const merged = { ...DEFAULT_OPTIONS };
+  const source = options && typeof options === "object" ? options : {};
+  for (const key of Object.keys(DEFAULT_OPTIONS)) {
+    if (source[key] !== void 0 && source[key] !== null) {
+      merged[key] = source[key];
+    }
+  }
+  merged.dryRun = merged.dryRun !== false;
+  merged.keepFailed = merged.keepFailed !== false;
+  merged.includeIncomplete = Boolean(merged.includeIncomplete);
+  merged.maxAgeDays = toPositiveNumber(merged.maxAgeDays);
+  merged.maxRuns = toPositiveNumber(merged.maxRuns);
+  merged.maxBytes = toPositiveNumber(merged.maxBytes);
+  return merged;
+}
+function toPositiveNumber(value) {
+  if (value === null || value === void 0 || value === "") return null;
+  const num2 = Number(value);
+  if (!Number.isFinite(num2) || num2 < 0) return null;
+  return num2;
+}
+function isDirectChild(parentDir, childDir) {
+  const parent = path2.resolve(parentDir);
+  const child = path2.resolve(childDir);
+  if (child === parent) return false;
+  const rel = path2.relative(parent, child);
+  if (!rel) return false;
+  if (path2.isAbsolute(rel)) return false;
+  if (rel === ".." || rel.startsWith(".." + path2.sep)) return false;
+  return !rel.includes(path2.sep);
+}
+function deriveStatus(summary) {
+  if (!summary || typeof summary !== "object") return "incomplete_or_unreadable";
+  if (typeof summary.status === "string") return summary.status;
+  if (summary.error) return "failed";
+  if ((summary.cancelledTasks || 0) > 0) return "cancelled";
+  if ((summary.failedTasks || 0) > 0 || (summary.timedOutTasks || 0) > 0) return "failed";
+  if ((summary.blockedTasks || 0) > 0) return "blocked";
+  const total = summary.totalTasks || 0;
+  const finished = (summary.completedTasks || 0) + (summary.partialTasks || 0);
+  if (total > 0 && finished >= total) return "completed";
+  return "running";
+}
+function isIncomplete(status, summary) {
+  if (!summary) return true;
+  return status === "running" || status === "unknown" || status === "incomplete_or_unreadable";
+}
+function runTimestampMs(summary, dirMtimeMs) {
+  for (const candidate of [summary?.endedAt, summary?.startedAt]) {
+    if (typeof candidate === "string" && candidate) {
+      const parsed = Date.parse(candidate);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+  }
+  return Number.isFinite(dirMtimeMs) ? dirMtimeMs : 0;
+}
+async function dirSizeBytes(dir) {
+  let total = 0;
+  const stack = [dir];
+  while (stack.length) {
+    const current = stack.pop();
+    let entries;
+    try {
+      entries = await fs2.readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const full = path2.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+      } else {
+        try {
+          const stat = await fs2.stat(full);
+          total += stat.size;
+        } catch {
+        }
+      }
+    }
+  }
+  return total;
+}
+async function buildPlan(options) {
+  const opts = normalizeOptions(options);
+  const outputDir = path2.resolve(String(options?.outputDir || path2.join(process.cwd(), ".subagent-runs")));
+  let entries = [];
+  try {
+    entries = await fs2.readdir(outputDir, { withFileTypes: true });
+  } catch {
+    return {
+      outputDir,
+      dryRun: opts.dryRun,
+      options: opts,
+      runs: [],
+      summary: emptySummary(opts.dryRun)
+    };
+  }
+  const now = Date.now();
+  const runs = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink?.()) continue;
+    if (!entry.isDirectory()) continue;
+    const runDir = path2.join(outputDir, entry.name);
+    if (!isDirectChild(outputDir, runDir)) continue;
+    let summary = null;
+    try {
+      summary = await readJson(path2.join(runDir, RUN_SUMMARY_FILE));
+    } catch {
+    }
+    let dirMtimeMs = 0;
+    try {
+      dirMtimeMs = (await fs2.stat(runDir)).mtimeMs;
+    } catch {
+    }
+    const status = deriveStatus(summary);
+    const timestampMs = runTimestampMs(summary, dirMtimeMs);
+    const ageDays = timestampMs > 0 ? Math.max(0, (now - timestampMs) / MS_PER_DAY) : null;
+    const bytes = await dirSizeBytes(runDir);
+    runs.push({
+      runDir,
+      name: entry.name,
+      runId: summary?.runId || entry.name,
+      status,
+      startedAt: summary?.startedAt || null,
+      endedAt: summary?.endedAt || null,
+      ageDays,
+      bytes,
+      summary: summary ? { runId: summary.runId, status, startedAt: summary.startedAt, endedAt: summary.endedAt } : null,
+      action: "keep",
+      reason: ""
+    });
+  }
+  classify(runs, opts);
+  return {
+    outputDir,
+    dryRun: opts.dryRun,
+    options: opts,
+    runs,
+    summary: summarizePlan(runs, opts.dryRun)
+  };
+}
+function classify(runs, opts) {
+  for (const run of runs) {
+    if (run.status === "failed" && opts.keepFailed) {
+      run.action = "keep";
+      run.reason = "keepFailed";
+      continue;
+    }
+    if (isIncomplete(run.status, run.summary) && !opts.includeIncomplete) {
+      run.action = "keep";
+      run.reason = "incomplete (includeIncomplete=false)";
+      continue;
+    }
+  }
+  const candidates = runs.filter((run) => run.action !== "keep" || run.reason === "");
+  if (opts.maxAgeDays != null) {
+    for (const run of candidates) {
+      if (run.ageDays != null && run.ageDays > opts.maxAgeDays) {
+        run.action = "delete";
+        run.reason = `older than maxAgeDays (${opts.maxAgeDays}d; age ${run.ageDays.toFixed(1)}d)`;
+      }
+    }
+  }
+  if (opts.maxRuns != null) {
+    const byNewest = runs.slice().sort((a, b) => (a.ageDays ?? Infinity) - (b.ageDays ?? Infinity));
+    for (let i = opts.maxRuns; i < byNewest.length; i++) {
+      const run = byNewest[i];
+      if (run.action === "delete") continue;
+      if (run.reason && run.reason !== "") continue;
+      run.action = "delete";
+      run.reason = `exceeds maxRuns (${opts.maxRuns})`;
+    }
+  }
+  if (opts.maxBytes != null) {
+    let keptBytes = runs.filter((run) => run.action !== "delete").reduce((sum, run) => sum + (run.bytes || 0), 0);
+    if (keptBytes > opts.maxBytes) {
+      const byOldest = runs.filter((run) => run.action !== "delete" && !(run.reason && run.reason !== "")).sort((a, b) => (b.ageDays ?? -Infinity) - (a.ageDays ?? -Infinity));
+      for (const run of byOldest) {
+        if (keptBytes <= opts.maxBytes) break;
+        run.action = "delete";
+        run.reason = `exceeds maxBytes (${opts.maxBytes})`;
+        keptBytes -= run.bytes || 0;
+      }
+    }
+  }
+}
+function summarizePlan(runs, dryRun) {
+  const deleteRuns = runs.filter((run) => run.action === "delete");
+  const reclaimedBytes = deleteRuns.reduce((sum, run) => sum + (run.bytes || 0), 0);
+  return {
+    totalRuns: runs.length,
+    deleteCount: deleteRuns.length,
+    keepCount: runs.length - deleteRuns.length,
+    reclaimedBytes,
+    dryRun
+  };
+}
+function emptySummary(dryRun) {
+  return { totalRuns: 0, deleteCount: 0, keepCount: 0, reclaimedBytes: 0, dryRun };
+}
+async function planCleanup(options = {}) {
+  return buildPlan(options);
+}
+async function executeCleanup(options = {}) {
+  const plan = await buildPlan(options);
+  const dryRun = plan.dryRun;
+  const errors = [];
+  const deletedRuns = [];
+  const keptRuns = [];
+  for (const run of plan.runs) {
+    if (run.action !== "delete") {
+      keptRuns.push(pickRun(run));
+      continue;
+    }
+    if (!isDirectChild(plan.outputDir, run.runDir)) {
+      errors.push({
+        runDir: run.runDir,
+        error: "refused: run dir is not a direct child of outputDir"
+      });
+      keptRuns.push(pickRun(run));
+      continue;
+    }
+    if (dryRun) {
+      deletedRuns.push(pickRun(run));
+      continue;
+    }
+    try {
+      await fs2.rm(run.runDir, { recursive: true, force: false });
+      deletedRuns.push(pickRun(run));
+    } catch (error51) {
+      errors.push({ runDir: run.runDir, error: error51?.message || String(error51) });
+      keptRuns.push(pickRun(run));
+    }
+  }
+  const reclaimedBytes = deletedRuns.reduce((sum, run) => sum + (run.bytes || 0), 0);
+  return {
+    outputDir: plan.outputDir,
+    deletedRuns,
+    keptRuns,
+    reclaimedBytes,
+    dryRun,
+    errors
+  };
+}
+function pickRun(run) {
+  return {
+    runDir: run.runDir,
+    runId: run.runId,
+    name: run.name,
+    status: run.status,
+    ageDays: run.ageDays,
+    bytes: run.bytes,
+    reason: run.reason
+  };
+}
+
+// src/core/scheduler.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+import fs6 from "node:fs/promises";
+import path6 from "node:path";
+import { fileURLToPath } from "node:url";
+
+// src/core/claude-runner.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+import { spawn as spawn2 } from "node:child_process";
+import fs4 from "node:fs/promises";
+import { statSync } from "node:fs";
+import os3 from "node:os";
+import path3 from "node:path";
+
+// src/core/result-normalizer.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+
+// src/core/result-repair.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+var STATUS_ENUM = ["completed", "partial", "blocked", "failed"];
+var SEVERITY_ENUM = ["low", "medium", "high"];
+var TOKEN_NOT_VISIBLE = "Exact token usage was not visible to the Claude subagent while it was composing this result.";
+var FALLBACK_SUMMARY = "Claude output was repaired into the agent-result contract; no summary was provided.";
+var ALIASES = {
+  status: ["status", "outcome", "result_status"],
+  summary: ["summary", "text", "message", "description", "result"],
+  filesChanged: ["filesChanged", "files_changed", "changedFiles", "changed_files", "files"],
+  commandsRun: ["commandsRun", "commands_run", "commands", "commandsExecuted"],
+  verification: ["verification", "verifications", "checks", "verificationsRun"],
+  risks: ["risks", "remaining_risks", "remainingRisks", "risk"],
+  nextSteps: ["nextSteps", "next_steps", "followups", "follow_ups"],
+  tokenUsageSummary: ["tokenUsageSummary", "token_usage_summary", "tokenUsage", "usageSummary"]
+};
+function repairAgentResultCandidate(value, schema) {
+  const repairs = [];
+  const errors = [];
+  try {
+    const extracted = extractCandidate(value, repairs, errors);
+    if (!extracted.ok) {
+      return { repaired: false, failed: true, repairs, errors, candidate: null };
+    }
+    const candidate = normalizeCandidate(extracted.value, repairs, errors);
+    if (!candidate) {
+      return { repaired: false, failed: true, repairs, errors, candidate: null };
+    }
+    if (schema && Array.isArray(schema.required)) {
+      for (const key of schema.required) {
+        if (!(key in candidate) || candidate[key] === void 0) {
+          errors.push(`Missing required field after repair: ${key}`);
+        }
+      }
+    }
+    return { repaired: repairs.length > 0, failed: false, repairs, errors, candidate };
+  } catch (error51) {
+    errors.push(`Unexpected repair failure: ${error51 && error51.message ? error51.message : String(error51)}`);
+    return { repaired: false, failed: true, repairs, errors, candidate: null };
+  }
+}
+function extractCandidate(value, repairs, errors) {
+  if (value === null || value === void 0) {
+    errors.push("Input was null or undefined.");
+    return { ok: false };
+  }
+  let obj;
+  if (typeof value === "string") {
+    obj = extractFromString(value, repairs, errors);
+    if (obj === void 0) return { ok: false };
+  } else if (typeof value === "object" && !Array.isArray(value)) {
+    obj = value;
+  } else {
+    errors.push(`Unsupported input type: ${typeof value}`);
+    return { ok: false };
+  }
+  obj = unwrapEnvelope(obj, repairs);
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+    errors.push("Extracted value is not a JSON object.");
+    return { ok: false };
+  }
+  return { ok: true, value: obj };
+}
+function unwrapEnvelope(value, repairs, depth = 0) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  if (depth > 8) return value;
+  if (value.type === "result" && value.result !== void 0) {
+    const inner = value.result;
+    if (typeof inner === "string") {
+      const parsed = extractFromString(inner, repairs, null);
+      if (parsed !== void 0) {
+        repairs.push('Unwrapped Claude CLI result envelope {type:"result"}.');
+        return unwrapEnvelope(parsed, repairs, depth + 1);
+      }
+      repairs.push("Unwrapped Claude CLI result envelope with non-JSON result string.");
+      return { result: inner };
+    }
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      repairs.push('Unwrapped Claude CLI result envelope {type:"result"}.');
+      return unwrapEnvelope(inner, repairs, depth + 1);
+    }
+  }
+  if (value.structured_output !== void 0) {
+    repairs.push("Unwrapped structured_output envelope.");
+    return unwrapEnvelope(value.structured_output, repairs, depth + 1);
+  }
+  if (value.message && typeof value.message === "object" && value.message.content !== void 0) {
+    const content = value.message.content;
+    let text = "";
+    if (Array.isArray(content)) {
+      text = content.map((part) => part && typeof part.text === "string" ? part.text : "").join("");
+    } else if (typeof content === "string") {
+      text = content;
+    }
+    if (text.trim()) {
+      const parsed = extractFromString(text, repairs, null);
+      if (parsed !== void 0) {
+        repairs.push("Parsed JSON from message.content.");
+        return unwrapEnvelope(parsed, repairs, depth + 1);
+      }
+    }
+  }
+  return value;
+}
+function extractFromString(text, repairs, errors) {
+  const trimmed = String(text).trim();
+  if (!trimmed) {
+    if (errors) errors.push("Empty string input.");
+    return void 0;
+  }
+  const fenced = extractFencedJson(trimmed);
+  if (fenced !== void 0) {
+    repairs.push("Extracted JSON from fenced code block.");
+    return fenced;
+  }
+  const direct = tryParseObject(trimmed);
+  if (direct !== void 0) return direct;
+  const balanced = extractBalancedJson(trimmed);
+  if (balanced !== void 0) {
+    repairs.push("Extracted JSON object from surrounding prose.");
+    return balanced;
+  }
+  if (errors) errors.push("Could not parse a JSON object from string input.");
+  return void 0;
+}
+function extractFencedJson(text) {
+  const re = /```(?:[a-zA-Z0-9_+-]+)?\s*\n?([\s\S]*?)```/g;
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    const inner = match[1].trim();
+    if (!inner) continue;
+    const parsed = tryParseObject(inner);
+    if (parsed !== void 0) return parsed;
+  }
+  return void 0;
+}
+function extractBalancedJson(text) {
+  const start = text.search(/[{[]/);
+  if (start === -1) return void 0;
+  const opener = text[start];
+  const closer = opener === "{" ? "}" : "]";
+  let depth = 0;
+  let inStr = false;
+  let escape2 = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (escape2) escape2 = false;
+      else if (ch === "\\") escape2 = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') {
+      inStr = true;
+      continue;
+    }
+    if (ch === opener) depth++;
+    else if (ch === closer) {
+      depth--;
+      if (depth === 0) {
+        return tryParseObject(text.slice(start, i + 1));
+      }
+    }
+  }
+  return void 0;
+}
+function tryParseObject(text) {
+  try {
+    const value = JSON.parse(text);
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+    return void 0;
+  } catch {
+    return void 0;
+  }
+}
+function normalizeCandidate(value, repairs, errors) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    errors.push("Normalized candidate is not an object.");
+    return null;
+  }
+  const mapped = mapAlternateKeys(value, repairs);
+  let status = mapStatus(mapped.status);
+  if (!status) {
+    if (mapped.status !== void 0) {
+      repairs.push(`Coerced unrecognized status "${mapped.status}" to "partial".`);
+    } else {
+      repairs.push('Added default status "partial".');
+    }
+    status = "partial";
+  }
+  let summary = pickSummary(mapped.summary);
+  if (!summary) {
+    summary = FALLBACK_SUMMARY;
+    repairs.push("Synthesized fallback summary.");
+  }
+  const filesChanged = normalizeFilesChanged(mapped.filesChanged);
+  const commandsRun = normalizeCommands(mapped.commandsRun);
+  const verification = normalizeVerification(mapped.verification, mapped.verificationEvidence, repairs);
+  const risks = normalizeRisks(mapped.risks);
+  const nextSteps = normalizeNextSteps(mapped.nextSteps);
+  const tokenUsageSummary = normalizeTokenUsageSummary(mapped.tokenUsageSummary, repairs);
+  const metrics = normalizeMetrics(mapped.metrics);
+  const failedCheck = [...commandsRun, ...verification].some((item) => item.status === "failed");
+  if (status === "completed" && failedCheck) {
+    repairs.push('Downgraded status from "completed" to "failed" due to a failed check.');
+    status = "failed";
+  }
+  return {
+    status,
+    summary,
+    filesChanged,
+    commandsRun,
+    verification,
+    risks,
+    nextSteps,
+    tokenUsageSummary,
+    metrics
+  };
+}
+function mapAlternateKeys(source, repairs) {
+  const out = {};
+  for (const [contract, aliases] of Object.entries(ALIASES)) {
+    for (const alias of aliases) {
+      if (source[alias] !== void 0) {
+        out[contract] = source[alias];
+        if (alias !== contract) {
+          repairs.push(`Mapped alternate key "${alias}" to "${contract}".`);
+        }
+        break;
+      }
+    }
+  }
+  const evidence = source.verificationEvidence ?? source.verification_evidence ?? source.evidence;
+  if (evidence !== void 0) out.verificationEvidence = evidence;
+  if (source.metrics !== void 0) out.metrics = source.metrics;
+  else if (source.usage !== void 0) out.metrics = source.usage;
+  return out;
+}
+function pickSummary(value) {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const key of ["summary", "text", "message"]) {
+      if (typeof value[key] === "string" && value[key].trim()) return value[key].trim();
+    }
+  }
+  return "";
+}
+function mapStatus(status) {
+  const text = String(status ?? "").toLowerCase().trim();
+  if (!text) return null;
+  if (STATUS_ENUM.includes(text)) return text;
+  if (["complete", "passed", "pass", "success", "succeeded", "done", "ok"].includes(text)) return "completed";
+  if (["partially_completed", "partial_complete", "in_progress", "incomplete"].includes(text)) return "partial";
+  if (["stuck"].includes(text)) return "blocked";
+  if (["fail", "error", "errored"].includes(text)) return "failed";
+  return null;
+}
+function mapCheckStatus(status) {
+  const text = String(status ?? "").toLowerCase().trim();
+  if (["passed", "pass", "success", "succeeded", "ok", "completed", "complete", "done"].includes(text)) return "passed";
+  if (["failed", "fail", "error", "errored"].includes(text)) return "failed";
+  if (["skipped", "skip"].includes(text)) return "skipped";
+  return "not_run";
+}
+function normalizeFilesChanged(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === "string") return { path: item, change: "" };
+    if (!item || typeof item !== "object") return null;
+    return {
+      path: String(item.path || item.file || item.filename || ""),
+      change: String(item.change || item.description || item.summary || item.action || "")
+    };
+  }).filter((item) => item && item.path);
+}
+function normalizeCommands(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === "string") return { command: item, status: "not_run" };
+    if (!item || typeof item !== "object") return null;
+    const out = {
+      command: String(item.command || item.cmd || item.name || ""),
+      status: mapCheckStatus(item.status)
+    };
+    const notes = item.notes || item.detail || item.evidence || "";
+    if (notes) out.notes = String(notes);
+    return out;
+  }).filter((item) => item && item.command);
+}
+function normalizeVerification(value, evidence, repairs) {
+  let arr = Array.isArray(value) ? value : [];
+  if (!arr.length && evidence !== void 0) {
+    repairs.push('Built verification entries from "verificationEvidence".');
+    const evArr = Array.isArray(evidence) ? evidence : [evidence];
+    arr = evArr.map((entry) => typeof entry === "string" ? { check: "verification", evidence: entry } : entry);
+  }
+  if (!Array.isArray(arr)) return [];
+  return arr.map((item) => {
+    if (typeof item === "string") return { check: item, status: "not_run" };
+    if (!item || typeof item !== "object") return null;
+    const check2 = String(item.check || item.name || item.title || item.label || "verification");
+    const out = { check: check2, status: mapCheckStatus(item.status) };
+    const ev = item.evidence || item.detail || item.notes || "";
+    if (ev) out.evidence = String(ev);
+    return out;
+  }).filter((item) => item && item.check);
+}
+function normalizeRisks(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === "string") return { risk: item, severity: "low" };
+    if (!item || typeof item !== "object") return null;
+    const out = {
+      risk: String(item.risk || item.description || item.summary || item.issue || ""),
+      severity: SEVERITY_ENUM.includes(item.severity) ? item.severity : "low"
+    };
+    const mitigation = item.mitigation || "";
+    if (mitigation) out.mitigation = String(mitigation);
+    return out;
+  }).filter((item) => item && item.risk);
+}
+function normalizeNextSteps(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === "string") return item;
+    if (item && typeof item === "object") return String(item.step || item.action || "");
+    return String(item ?? "");
+  }).filter(Boolean);
+}
+function normalizeTokenUsageSummary(value, repairs) {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const key of ["summary", "note", "text", "message"]) {
+      if (typeof value[key] === "string" && value[key].trim()) return value[key].trim();
+    }
+  }
+  repairs.push('Filled tokenUsageSummary with "not visible" placeholder; no exact counts fabricated.');
+  return TOKEN_NOT_VISIBLE;
+}
+function normalizeMetrics(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (typeof val === "number" || typeof val === "string" || typeof val === "boolean") {
+      out[key] = val;
+    }
+  }
+  return out;
+}
+
 // src/core/result-normalizer.mjs
 function parseAgentResult(raw) {
   if (!raw) return null;
   if (typeof raw === "string") {
     const parsed = safeJsonParse(raw);
-    return parsed.ok ? parseAgentResult(parsed.value) : null;
+    if (parsed.ok) return parseAgentResult(parsed.value);
+    const repaired2 = repairAgentResultCandidate(raw);
+    return repaired2.candidate ? attachRepairDiagnostics(repaired2.candidate, repaired2) : null;
   }
   if (raw.structured_output) return parseAgentResult(raw.structured_output);
   if (raw.status && raw.summary) return raw;
@@ -31406,22 +32032,29 @@ function parseAgentResult(raw) {
     const result = typeof raw.result === "string" ? raw.result.trim() : raw.result;
     const parsed = safeJsonParse(result);
     if (parsed.ok) return parsed.value;
+    const repaired2 = repairAgentResultCandidate(raw);
+    if (repaired2.candidate) return attachRepairDiagnostics(repaired2.candidate, repaired2);
   }
   if (raw.message?.content) {
     const text = Array.isArray(raw.message.content) ? raw.message.content.map((part) => part.text || "").join("") : String(raw.message.content);
     const parsed = safeJsonParse(text);
     if (parsed.ok) return parsed.value;
+    const repaired2 = repairAgentResultCandidate(raw);
+    if (repaired2.candidate) return attachRepairDiagnostics(repaired2.candidate, repaired2);
   }
+  const repaired = repairAgentResultCandidate(raw);
+  if (repaired.candidate) return attachRepairDiagnostics(repaired.candidate, repaired);
   return raw;
 }
 function normalizeAgentResult(value) {
   if (!value || typeof value !== "object") {
-    return createFallbackResult(value);
+    const repaired = repairAgentResultCandidate(value);
+    return repaired.candidate ? normalizeAgentResult(attachRepairDiagnostics(repaired.candidate, repaired)) : createFallbackResult(value);
   }
   const filesChanged = value.filesChanged || value.files_changed || value.changedFiles || value.changed_files || [];
   const commandsRun = value.commandsRun || value.commands_run || value.commands || [];
-  const normalizedCommands = normalizeCommands(commandsRun);
-  const verification = normalizeVerification(value.verification || value.verifications || value.checks || []);
+  const normalizedCommands = normalizeCommands2(commandsRun);
+  const verification = normalizeVerification2(value.verification || value.verifications || value.checks || []);
   const risks = value.risks || value.remaining_risks || value.remainingRisks || [];
   const nextSteps = value.nextSteps || value.next_steps || [];
   const status = mapAgentStatus(value.status || value.result || value.outcome);
@@ -31432,16 +32065,29 @@ function normalizeAgentResult(value) {
     return {
       status: normalizedStatus,
       summary: String(summary),
-      filesChanged: normalizeFilesChanged(filesChanged),
+      filesChanged: normalizeFilesChanged2(filesChanged),
       commandsRun: normalizedCommands,
       verification,
-      risks: normalizeRisks(risks),
+      risks: normalizeRisks2(risks),
       nextSteps: Array.isArray(nextSteps) ? nextSteps.map(String) : [],
-      tokenUsageSummary: normalizeTokenUsageSummary(value.tokenUsageSummary),
-      metrics: normalizeMetrics(value.metrics)
+      tokenUsageSummary: normalizeTokenUsageSummary2(value.tokenUsageSummary),
+      metrics: normalizeMetrics2(value.metrics),
+      ...value.repair ? { repair: value.repair } : {}
     };
   }
   return createFallbackResult(value);
+}
+function attachRepairDiagnostics(candidate, repair) {
+  if (!candidate || typeof candidate !== "object") return candidate;
+  if (!repair?.repaired) return candidate;
+  return {
+    ...candidate,
+    repair: {
+      repaired: true,
+      repairs: repair.repairs || [],
+      errors: repair.errors || []
+    }
+  };
 }
 function normalizeStatus(execution, parsed) {
   if (execution.cancelled) return "cancelled";
@@ -31490,7 +32136,7 @@ function mapAgentStatus(status) {
   if (["failed", "fail", "error"].includes(text)) return "failed";
   return null;
 }
-function mapCheckStatus(status) {
+function mapCheckStatus2(status) {
   const text = String(status || "").toLowerCase();
   if (["passed", "pass", "success", "succeeded", "ok", "completed"].includes(text)) return "passed";
   if (["failed", "fail", "error"].includes(text)) return "failed";
@@ -31498,7 +32144,7 @@ function mapCheckStatus(status) {
   if (["not_run", "not run", "not-run"].includes(text)) return "not_run";
   return "not_run";
 }
-function normalizeFilesChanged(value) {
+function normalizeFilesChanged2(value) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
     if (typeof item === "string") return { path: item, change: "" };
@@ -31508,29 +32154,29 @@ function normalizeFilesChanged(value) {
     };
   }).filter((item) => item.path);
 }
-function normalizeCommands(value) {
+function normalizeCommands2(value) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
     if (typeof item === "string") return { command: item, status: "not_run" };
     return {
       command: String(item.command || item.cmd || ""),
-      status: mapCheckStatus(item.status),
+      status: mapCheckStatus2(item.status),
       notes: item.notes || item.detail || item.evidence || ""
     };
   });
 }
-function normalizeVerification(value) {
+function normalizeVerification2(value) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
     if (typeof item === "string") return { check: item, status: "not_run" };
     return {
       check: String(item.check || item.name || item.title || ""),
-      status: mapCheckStatus(item.status),
+      status: mapCheckStatus2(item.status),
       evidence: item.evidence || item.detail || item.notes || ""
     };
   });
 }
-function normalizeRisks(value) {
+function normalizeRisks2(value) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
     if (typeof item === "string") return { risk: item, severity: "low" };
@@ -31541,11 +32187,11 @@ function normalizeRisks(value) {
     };
   });
 }
-function normalizeMetrics(value) {
+function normalizeMetrics2(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value;
 }
-function normalizeTokenUsageSummary(value) {
+function normalizeTokenUsageSummary2(value) {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (value && typeof value === "object") {
     for (const key of ["summary", "note", "text", "message"]) {
@@ -31580,11 +32226,11 @@ function pickNumber(obj, keys) {
 // src/core/process-tree.mjs
 init_define_SCP_RESULT_SCHEMA_INLINE();
 import { spawn } from "node:child_process";
-import fs2 from "node:fs/promises";
+import fs3 from "node:fs/promises";
 import os2 from "node:os";
 async function exists(filePath) {
   try {
-    await fs2.access(filePath);
+    await fs3.access(filePath);
     return true;
   } catch {
     return false;
@@ -31690,6 +32336,7 @@ async function collectDescendants(pid, seen = /* @__PURE__ */ new Set()) {
 
 // src/core/claude-runner.mjs
 var activeProcesses = /* @__PURE__ */ new Map();
+var RUNTIME_HEARTBEAT_MS = 45e3;
 function listActiveProcesses(runId) {
   const records = runId ? [...activeProcesses.values()].filter((record2) => record2.runId === runId) : [...activeProcesses.values()];
   return records.map(({ runId: runId2, taskId, title, pid, startedAt, eventLogPath }) => {
@@ -31719,9 +32366,9 @@ async function cancelActiveRun(runId) {
   return { runId, cancelledProcesses: targets.length };
 }
 async function runClaudeTask(task, context) {
-  const taskDir = path2.join(context.runDir, "tasks", task.id);
-  await fs3.mkdir(taskDir, { recursive: true });
-  const eventLogPath = path2.join(taskDir, "events.jsonl");
+  const taskDir = path3.join(context.runDir, "tasks", task.id);
+  await fs4.mkdir(taskDir, { recursive: true });
+  const eventLogPath = path3.join(taskDir, "events.jsonl");
   const startedAt = (/* @__PURE__ */ new Date()).toISOString();
   const prompt = buildPrompt(task);
   const command = buildClaudeCommand(
@@ -31740,8 +32387,8 @@ async function runClaudeTask(task, context) {
     dryRun: Boolean(context.dryRun),
     command: command.display
   });
-  await fs3.writeFile(path2.join(taskDir, "prompt.md"), prompt, "utf8");
-  await writeJson(path2.join(taskDir, "task.json"), {
+  await fs4.writeFile(path3.join(taskDir, "prompt.md"), prompt, "utf8");
+  await writeJson(path3.join(taskDir, "task.json"), {
     id: task.id,
     title: task.title,
     kind: task.kind,
@@ -31761,6 +32408,7 @@ async function runClaudeTask(task, context) {
       endedAt: endedAt2,
       taskDir,
       eventLogPath,
+      lastEventAt: lastEventTimestamp(eventLogPath),
       exitCode: 0,
       timedOut: false,
       cancelled: false,
@@ -31779,7 +32427,7 @@ async function runClaudeTask(task, context) {
       measuredUsageSummary: "Dry run; no token usage was measured.",
       command: command.display
     };
-    await writeJson(path2.join(taskDir, "result.json"), dryResult);
+    await writeJson(path3.join(taskDir, "result.json"), dryResult);
     await appendEvent(eventLogPath, {
       type: "task_completed",
       runId: context.runId,
@@ -31806,7 +32454,7 @@ async function runClaudeTask(task, context) {
   });
   const raw = safeJsonParse(execution.stdout);
   await writeJson(
-    path2.join(taskDir, "raw-output.json"),
+    path3.join(taskDir, "raw-output.json"),
     raw.ok ? raw.value : { parseError: raw.error, stdout: execution.stdout }
   );
   const rawParsed = parseAgentResult(raw.ok ? raw.value : execution.stdout);
@@ -31822,6 +32470,7 @@ async function runClaudeTask(task, context) {
     endedAt,
     taskDir,
     eventLogPath,
+    lastEventAt: lastEventTimestamp(eventLogPath),
     exitCode: execution.exitCode,
     signal: execution.signal,
     timedOut: execution.timedOut,
@@ -31833,7 +32482,7 @@ async function runClaudeTask(task, context) {
     measuredUsageSummary: summarizeUsage(rawValue || parsed),
     command: command.display
   };
-  await writeJson(path2.join(taskDir, "result.json"), result);
+  await writeJson(path3.join(taskDir, "result.json"), result);
   await appendEvent(eventLogPath, {
     type: terminalEventType(status),
     runId: context.runId,
@@ -31853,7 +32502,7 @@ async function resolveClaudeExecutable(preferred) {
       const target = await resolveWindowsCommand(value);
       if (target) return target;
     }
-    const resolved = /[\\/:]/.test(value) ? path2.resolve(value) : value;
+    const resolved = /[\\/:]/.test(value) ? path3.resolve(value) : value;
     if (/\.cmd$/i.test(resolved) && /[\\/:]/.test(resolved)) {
       const target = await resolveTargetFromCmd(resolved);
       if (target) return { ...target, shell: false };
@@ -31877,8 +32526,8 @@ async function resolveWindowsCommand(commandName) {
       if (await exists(candidate)) return { executable: candidate, preArgs: [], shell: false };
       continue;
     }
-    const siblingExe = path2.join(
-      path2.dirname(candidate),
+    const siblingExe = path3.join(
+      path3.dirname(candidate),
       "node_modules",
       "@anthropic-ai",
       "claude-code",
@@ -31913,8 +32562,15 @@ Controller rules:
 Task event logging:
 - The environment exposes SCP_EVENT_LOG (path to a JSONL file), SCP_RUN_ID, SCP_TASK_ID, and SCP_TASK_DIR.
 - As you work, append one compact JSON object per line to the file at SCP_EVENT_LOG to report progress. Each line must be valid JSON on its own.
-- Emit events for these runtime milestones: phase_started (when beginning a distinct phase), heartbeat (periodic alive signal during long work), checkpoint (after a meaningful unit of progress), blocked (when waiting on something external or unable to proceed), command_started (before running a verification/shell command, include a short label), command_finished (after it, include exit code and pass/fail).
-- Keep events compact: include a short \`type\`, an ISO timestamp, and a brief text field. Never include full logs, diffs, file contents, or code in events. A label or one-line summary is enough.
+- Every event must carry a short \`type\` and an ISO \`timestamp\`. Reuse SCP_RUN_ID as \`runId\` and SCP_TASK_ID as \`taskId\` so events can be correlated back to this task. Beyond that, keep each event type's payload compact - a label or one-line summary is enough. Never include full logs, diffs, file contents, or code in events.
+- Emit events for these runtime milestones, each with the fields noted:
+  - phase_started: \`type\`, \`timestamp\`, \`phase\` (short name of the phase you are beginning).
+  - heartbeat: \`type\`, \`timestamp\`, \`runId\`, \`taskId\`, \`summary\` (one line on current progress), \`sequence\` (an integer that increments with every heartbeat so ordering is visible).
+  - checkpoint: \`type\`, \`timestamp\`, \`summary\` (one line on the unit of progress just completed).
+  - blocked: \`type\`, \`timestamp\`, \`reason\` (one line on what you are waiting on).
+  - command_started: \`type\`, \`timestamp\`, \`label\` (short name of the verification/shell command), \`command\` (one-line form, no full output).
+  - command_finished: \`type\`, \`timestamp\`, \`label\`, \`exitCode\`, \`status\` ('pass' | 'fail').
+- Send a heartbeat at least every 45 seconds during long work, incrementing \`sequence\` each time.
 - Event logging is best-effort and must never replace the required JSON result; if writing to SCP_EVENT_LOG fails, continue the task and still return the JSON result.
 
 Task:
@@ -31979,7 +32635,7 @@ function pushOptionalArg(args, displayArgs, value, flag) {
 }
 function spawnClaude(options) {
   return new Promise((resolve) => {
-    const stdinPrompt = options.prompt.length > 2e4 ? `Read and follow the full task prompt saved at ${path2.join(options.taskDir, "prompt.md")}. Return only JSON that matches the requested schema.` : options.prompt;
+    const stdinPrompt = options.prompt.length > 2e4 ? `Read and follow the full task prompt saved at ${path3.join(options.taskDir, "prompt.md")}. Return only JSON that matches the requested schema.` : options.prompt;
     const child = spawn2(options.executable, options.args, {
       cwd: options.cwd,
       env: {
@@ -31998,8 +32654,10 @@ function spawnClaude(options) {
     let stderr = "";
     let timedOut = false;
     let settled = false;
-    const stdoutPath = path2.join(options.taskDir, "stdout.txt");
-    const stderrPath = path2.join(options.taskDir, "stderr.txt");
+    let heartbeatSequence = 0;
+    let lastActivityAt = (/* @__PURE__ */ new Date()).toISOString();
+    const stdoutPath = path3.join(options.taskDir, "stdout.txt");
+    const stderrPath = path3.join(options.taskDir, "stderr.txt");
     const activeKey = `${options.runId}:${options.taskId}`;
     const record2 = {
       runId: options.runId,
@@ -32018,14 +32676,28 @@ function spawnClaude(options) {
       pid: child.pid
     }).catch(() => {
     });
+    const heartbeat = setInterval(() => {
+      appendEvent(options.eventLogPath, {
+        type: "heartbeat",
+        runId: options.runId,
+        taskId: options.taskId,
+        sequence: ++heartbeatSequence,
+        source: "runtime",
+        summary: "runtime heartbeat: Claude process is still active",
+        lastActivityAt
+      }).catch(() => {
+      });
+    }, RUNTIME_HEARTBEAT_MS);
+    heartbeat.unref?.();
     const finish = async ({ exitCode, signal }) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       clearTimeout(killGraceTimeout);
+      clearInterval(heartbeat);
       activeProcesses.delete(activeKey);
-      await fs3.writeFile(stdoutPath, stdout, "utf8");
-      await fs3.writeFile(stderrPath, stderr, "utf8");
+      await fs4.writeFile(stdoutPath, stdout, "utf8");
+      await fs4.writeFile(stderrPath, stderr, "utf8");
       await appendEvent(options.eventLogPath, {
         type: "process_exited",
         runId: options.runId,
@@ -32049,9 +32721,11 @@ function spawnClaude(options) {
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
+      lastActivityAt = (/* @__PURE__ */ new Date()).toISOString();
       stdout += chunk;
     });
     child.stderr.on("data", (chunk) => {
+      lastActivityAt = (/* @__PURE__ */ new Date()).toISOString();
       stderr += chunk;
     });
     child.on("error", async (error51) => {
@@ -32068,9 +32742,9 @@ function spawnClaude(options) {
 }
 async function resolveTargetFromCmd(cmdPath) {
   try {
-    const content = await fs3.readFile(cmdPath, "utf8");
-    const dir = path2.dirname(cmdPath);
-    const expand = (value) => value.replace(/%~dp0\\?/gi, dir + path2.sep).replace(/%dp0%\\?/gi, dir + path2.sep);
+    const content = await fs4.readFile(cmdPath, "utf8");
+    const dir = path3.dirname(cmdPath);
+    const expand = (value) => value.replace(/%~dp0\\?/gi, dir + path3.sep).replace(/%dp0%\\?/gi, dir + path3.sep);
     const scriptMatch = content.match(/"([^"]*\.(?:js|cjs|mjs))"/i);
     if (scriptMatch) {
       const scriptPath = expand(scriptMatch[1]);
@@ -32103,6 +32777,14 @@ function terminalEventType(status) {
   if (status === "cancelled") return "task_cancelled";
   return "task_failed";
 }
+function lastEventTimestamp(eventLogPath) {
+  if (!eventLogPath) return null;
+  try {
+    return statSync(eventLogPath).mtime.toISOString();
+  } catch {
+    return null;
+  }
+}
 async function appendEvent(eventLogPath, event) {
   if (!eventLogPath) return;
   try {
@@ -32110,15 +32792,1135 @@ async function appendEvent(eventLogPath, event) {
     const normalized = { ...event, timestamp };
     delete normalized.ts;
     const line = JSON.stringify(normalized);
-    await fs3.appendFile(eventLogPath, `${line}
+    await fs4.appendFile(eventLogPath, `${line}
 `, "utf8");
   } catch {
   }
 }
 
+// src/core/controller-summary.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+import path4 from "node:path";
+var DEFAULT_STALE_MS = 12e4;
+var DEFAULT_NOW = () => Date.now();
+var SNIPPET_LIMIT = 200;
+var MAX_RISKS = 8;
+var MAX_NEXT_ACTIONS = 10;
+var MAX_RECENT_EVENTS = 8;
+function buildControllerSummary(runSummaryOrStatus, options = {}) {
+  const now = typeof options.now === "function" ? options.now : DEFAULT_NOW;
+  const staleMs = Number.isFinite(options.staleMs) ? options.staleMs : DEFAULT_STALE_MS;
+  const { summary, runtime, mode } = unwrap(runSummaryOrStatus);
+  if (mode === "status-list") {
+    return buildListSummary(runtime, { now, staleMs });
+  }
+  const tasks = collectTasks(summary, runtime);
+  const taskEventMap = buildTaskEventMap(runtime.taskEvents, summary);
+  const active = collectActive(runtime.active, taskEventMap);
+  const counts = countTasks(summary, tasks);
+  const status = resolveStatus(summary, runtime, counts);
+  const phase = runtime.done === false ? "in_progress" : "final";
+  const changedFiles = aggregateChangedFiles(tasks);
+  const ownershipViolations = changedFiles.filter((file2) => file2.tasks.length > 1);
+  const keyRisks = aggregateRisks(tasks);
+  const verificationSummary = aggregateVerification(tasks);
+  const tokenCost = aggregateTokenCost(summary, tasks);
+  const staleOrStalled = detectStaleOrStalled(active, taskEventMap, { now, staleMs });
+  const nextActions = aggregateNextActions(tasks, counts, staleOrStalled);
+  const artifacts = buildArtifacts(summary, tasks);
+  const out = {
+    runId: summary?.runId || runtime.runId || null,
+    runDir: summary?.runDir || runtime.runDir || null,
+    status,
+    phase,
+    counts,
+    activeTasks: active,
+    staleOrStalled,
+    changedFiles,
+    ownershipViolations: ownershipViolations.length ? ownershipViolations : void 0,
+    keyRisks,
+    verificationSummary,
+    tokenCost,
+    nextActions,
+    artifacts
+  };
+  if (summary?.recovered) out.recovered = true;
+  if (summary?.error) out.error = snippet(String(summary.error), SNIPPET_LIMIT);
+  if (summary?.dryRun) out.dryRun = true;
+  if (runtime.recentEvents?.length) {
+    out.recentEvents = runtime.recentEvents.slice(-MAX_RECENT_EVENTS).map(trimEvent);
+  }
+  return pruneUndefined(out);
+}
+function unwrap(payload) {
+  if (!payload || typeof payload !== "object") {
+    return { summary: null, runtime: {}, mode: "unknown" };
+  }
+  if (payload.mode === "list") {
+    return {
+      summary: null,
+      runtime: {
+        mode: "list",
+        outputDir: payload.outputDir,
+        runs: Array.isArray(payload.runs) ? payload.runs : [],
+        active: payload.active,
+        statusEvents: payload.statusEvents
+      },
+      mode: "status-list"
+    };
+  }
+  if (payload.mode === "single" || Object.prototype.hasOwnProperty.call(payload, "done")) {
+    return {
+      summary: payload.summary || payload.runSummary || null,
+      runtime: {
+        done: payload.done,
+        status: payload.status,
+        mode: payload.mode,
+        runId: payload.runId,
+        runDir: payload.runDir,
+        active: payload.active,
+        recentEvents: payload.recentEvents,
+        taskEvents: payload.taskEvents
+      },
+      mode: payload.mode === "single" ? "status-single" : "collect"
+    };
+  }
+  if (payload.totalTasks !== void 0 || Array.isArray(payload.tasks) || payload.runId) {
+    return { summary: payload, runtime: {}, mode: "run-summary" };
+  }
+  return { summary: payload, runtime: {}, mode: "unknown" };
+}
+function collectTasks(summary, runtime) {
+  const fromSummary = summary && Array.isArray(summary.tasks) ? summary.tasks : [];
+  const fromResults = !fromSummary.length && Array.isArray(runtime.results) ? runtime.results : [];
+  const candidates = fromSummary.length ? fromSummary : fromResults;
+  return candidates.filter((task) => task && typeof task === "object" && task.id);
+}
+function buildTaskEventMap(taskEvents, summary) {
+  const map2 = /* @__PURE__ */ new Map();
+  if (Array.isArray(taskEvents)) {
+    for (const entry of taskEvents) {
+      if (entry && entry.taskId) map2.set(entry.taskId, entry);
+    }
+  }
+  if (summary && Array.isArray(summary.tasks)) {
+    for (const task of summary.tasks) {
+      if (task?.id && task.events && !map2.has(task.id)) map2.set(task.id, task.events);
+    }
+  }
+  return map2;
+}
+function countTasks(summary, tasks) {
+  const empty = { total: 0, completed: 0, partial: 0, blocked: 0, failed: 0, skipped: 0, cancelled: 0, timedOut: 0 };
+  if (summary && typeof summary.totalTasks === "number") {
+    return {
+      total: summary.totalTasks,
+      completed: num(summary.completedTasks),
+      partial: num(summary.partialTasks),
+      blocked: num(summary.blockedTasks),
+      failed: num(summary.failedTasks),
+      skipped: num(summary.skippedTasks),
+      cancelled: num(summary.cancelledTasks),
+      timedOut: num(summary.timedOutTasks)
+    };
+  }
+  for (const task of tasks) {
+    const key = statusKey(task.status);
+    empty[key] += 1;
+    empty.total += 1;
+  }
+  return empty;
+}
+function resolveStatus(summary, runtime, counts) {
+  if (runtime && typeof runtime.status === "string" && runtime.status !== "running") {
+    return runtime.status;
+  }
+  if (runtime?.done === false) return "running";
+  if (summary && typeof summary.status === "string") return summary.status;
+  if (summary?.error) return "failed";
+  if (counts.cancelled > 0) return "cancelled";
+  if (counts.failed > 0 || counts.timedOut > 0) return "failed";
+  if (counts.blocked > 0) return "blocked";
+  if (counts.total > 0 && counts.completed + counts.partial >= counts.total) return "completed";
+  if (counts.total > 0) return "partial";
+  return "unknown";
+}
+function collectActive(active, taskEventMap) {
+  if (!Array.isArray(active)) return [];
+  return active.filter((record2) => record2 && record2.taskId).map((record2) => {
+    const events = taskEventMap.get(record2.taskId) || {};
+    return pruneUndefined({
+      taskId: record2.taskId,
+      title: record2.title || void 0,
+      pid: record2.pid ?? void 0,
+      startedAt: record2.startedAt || void 0,
+      lastEventAt: record2.lastEventAt || events.lastEventAt || void 0,
+      lastHeartbeatAt: events.lastHeartbeatAt || void 0,
+      phase: events.phase || void 0,
+      latestSummary: events.latestSummary ? snippet(events.latestSummary, SNIPPET_LIMIT) : void 0,
+      eventLogPath: record2.eventLogPath || events.eventLogPath || void 0
+    });
+  });
+}
+function detectStaleOrStalled(active, taskEventMap, { now, staleMs }) {
+  const hints = [];
+  for (const task of active) {
+    const events = taskEventMap.get(task.taskId) || {};
+    const blockedReason = events.blockedReason;
+    if (blockedReason) {
+      hints.push({ taskId: task.taskId, hint: "blocked", reason: snippet(blockedReason, SNIPPET_LIMIT), lastHeartbeatAt: events.lastHeartbeatAt });
+      continue;
+    }
+    const heartbeat = events.lastHeartbeatAt || task.lastHeartbeatAt;
+    const lastEvent = events.lastEventAt || task.lastEventAt;
+    const reference = heartbeat || lastEvent;
+    if (reference) {
+      const ageMs = now() - Date.parse(reference);
+      if (Number.isFinite(ageMs) && ageMs > staleMs) {
+        hints.push({ taskId: task.taskId, hint: "stale", ageMs, lastHeartbeatAt: heartbeat || void 0, lastEventAt: lastEvent || void 0 });
+      }
+    } else if (events.eventCount === 0 || events.eventCount === void 0) {
+      hints.push({ taskId: task.taskId, hint: "stalled", reason: "active with no heartbeat events", startedAt: task.startedAt });
+    }
+  }
+  return hints;
+}
+function aggregateChangedFiles(tasks) {
+  const byPath = /* @__PURE__ */ new Map();
+  for (const task of tasks) {
+    const files = task?.parsed?.filesChanged;
+    if (!Array.isArray(files)) continue;
+    for (const file2 of files) {
+      const filePath = String(file2?.path || file2?.file || "").trim();
+      if (!filePath) continue;
+      const entry = byPath.get(filePath) || { path: filePath, tasks: [], change: "" };
+      if (!entry.tasks.includes(task.id)) entry.tasks.push(task.id);
+      if (!entry.change && file2.change) entry.change = snippet(String(file2.change), SNIPPET_LIMIT);
+      byPath.set(filePath, entry);
+    }
+  }
+  return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+}
+function aggregateRisks(tasks) {
+  const collected = [];
+  for (const task of tasks) {
+    const risks = task?.parsed?.risks;
+    if (!Array.isArray(risks)) continue;
+    for (const risk of risks) {
+      const text = String(risk?.risk || risk?.description || "").trim();
+      if (!text) continue;
+      collected.push({
+        taskId: task.id,
+        risk: snippet(text, SNIPPET_LIMIT),
+        severity: ["high", "medium", "low"].includes(risk?.severity) ? risk.severity : "low",
+        mitigation: risk?.mitigation ? snippet(String(risk.mitigation), SNIPPET_LIMIT) : void 0
+      });
+    }
+  }
+  const rank = { high: 0, medium: 1, low: 2 };
+  collected.sort((a, b) => rank[a.severity] - rank[b.severity]);
+  return pruneUndefinedArray(collected.slice(0, MAX_RISKS));
+}
+function aggregateVerification(tasks) {
+  const tally = { passed: 0, failed: 0, skipped: 0, notRun: 0 };
+  const failedChecks = [];
+  for (const task of tasks) {
+    const parsed = task?.parsed || {};
+    for (const item of [...parsed.verification || [], ...parsed.commandsRun || []]) {
+      const status = mapCheckStatus3(item?.status);
+      tally[status] += 1;
+      if (status === "failed") {
+        const label = item.check || item.command || item.name || "check";
+        const evidence = item.evidence || item.notes || item.detail || "";
+        failedChecks.push({
+          taskId: task.id,
+          check: snippet(String(label), SNIPPET_LIMIT),
+          evidence: evidence ? snippet(String(evidence), SNIPPET_LIMIT) : void 0
+        });
+      }
+    }
+  }
+  return pruneUndefined({
+    tally,
+    failedChecks: failedChecks.length ? failedChecks.slice(0, 12) : [],
+    allPassed: tally.failed === 0 && tally.passed > 0 && tally.notRun === 0 && tally.skipped === 0
+  });
+}
+function aggregateTokenCost(summary, tasks) {
+  let input = 0;
+  let output = 0;
+  let cacheRead = 0;
+  let cacheCreate = 0;
+  let cost = 0;
+  let measured = false;
+  const perTaskNotes = [];
+  for (const task of tasks) {
+    const usage = task.usage;
+    if (usage && typeof usage === "object") {
+      const inT = pickNum(usage, ["input_tokens", "inputTokens", "tokensInput"]);
+      const outT = pickNum(usage, ["output_tokens", "outputTokens", "tokensOutput"]);
+      const cr = pickNum(usage, ["cache_read_input_tokens", "cacheReadInputTokens"]);
+      const cc = pickNum(usage, ["cache_creation_input_tokens", "cacheCreationInputTokens"]);
+      const c = pickNum(usage, ["cost_usd", "costUsd"]) ?? pickNum(task, ["costUsd"]) ?? pickNum(task?.parsed?.metrics, ["costUsd", "cost_usd"]);
+      if (inT != null) {
+        input += inT;
+        measured = true;
+      }
+      if (outT != null) {
+        output += outT;
+        measured = true;
+      }
+      if (cr != null) {
+        cacheRead += cr;
+        measured = true;
+      }
+      if (cc != null) {
+        cacheCreate += cc;
+        measured = true;
+      }
+      if (c != null) {
+        cost += c;
+        measured = true;
+      }
+    }
+    if (typeof task.measuredUsageSummary === "string" && task.measuredUsageSummary) {
+      perTaskNotes.push({ taskId: task.id, note: snippet(task.measuredUsageSummary, SNIPPET_LIMIT) });
+    }
+  }
+  const totals = pruneUndefined({
+    input: measured && input ? input : void 0,
+    output: measured && output ? output : void 0,
+    cacheRead: measured && cacheRead ? cacheRead : void 0,
+    cacheCreate: measured && cacheCreate ? cacheCreate : void 0,
+    total: measured && (input || output) ? input + output + cacheRead + cacheCreate : void 0,
+    costUsd: measured && cost ? Number(cost.toFixed(6)) : void 0
+  });
+  return pruneUndefined({
+    measured,
+    totals,
+    note: measured ? `Aggregated measured usage across ${tasks.length} task(s); prefer over subagent self-report.` : "No measured usage was available in the Claude CLI envelopes.",
+    perTask: perTaskNotes.length ? perTaskNotes.slice(0, 12) : void 0
+  });
+}
+function aggregateNextActions(tasks, counts, staleOrStalled) {
+  const actions = [];
+  if (counts.failed > 0) {
+    actions.push(`Investigate ${counts.failed} failed task(s) before integrating.`);
+  }
+  if (counts.timedOut > 0) {
+    actions.push(`Re-run or raise timeout for ${counts.timedOut} timed-out task(s).`);
+  }
+  if (counts.blocked > 0) {
+    actions.push(`Unblock ${counts.blocked} blocked task(s).`);
+  }
+  for (const hint of staleOrStalled) {
+    actions.push(`Re-check stalled/stale task ${hint.taskId} (${hint.hint}).`);
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (const task of tasks) {
+    const steps = task?.parsed?.nextSteps;
+    if (!Array.isArray(steps)) continue;
+    for (const step of steps) {
+      const text = snippet(String(step || "").trim(), SNIPPET_LIMIT);
+      if (!text || seen.has(text)) continue;
+      seen.add(text);
+      actions.push(text);
+      if (actions.length >= MAX_NEXT_ACTIONS) return actions;
+    }
+  }
+  return actions;
+}
+function buildArtifacts(summary, tasks) {
+  const runDir = summary?.runDir || null;
+  const taskArtifacts = tasks.map((task) => pruneUndefined({
+    taskId: task.id,
+    taskDir: task.taskDir || void 0,
+    resultPath: task.taskDir ? path4.join(task.taskDir, "result.json") : void 0,
+    eventLogPath: task.eventLogPath || (task.taskDir ? path4.join(task.taskDir, "events.jsonl") : void 0)
+  }));
+  return pruneUndefined({
+    runDir,
+    runSummaryPath: runDir ? path4.join(runDir, "run-summary.json") : void 0,
+    runInputPath: runDir ? path4.join(runDir, "run-input.json") : void 0,
+    tasks: taskArtifacts
+  });
+}
+function buildListSummary(runtime, { now, staleMs }) {
+  const runs = (runtime.runs || []).map((run) => {
+    if (!run || typeof run !== "object") return null;
+    if (run.status === "incomplete_or_unreadable") {
+      return { runDir: run.runDir || null, status: "incomplete_or_unreadable" };
+    }
+    return pruneUndefined({
+      runId: run.runId || (run.runDir ? path4.basename(run.runDir) : void 0),
+      runDir: run.runDir || void 0,
+      status: deriveRunStatusLite(run),
+      startedAt: run.startedAt || void 0,
+      endedAt: run.endedAt || void 0,
+      totalTasks: run.totalTasks ?? void 0,
+      completedTasks: run.completedTasks ?? void 0,
+      failedTasks: run.failedTasks ?? void 0,
+      blockedTasks: run.blockedTasks ?? void 0
+    });
+  }).filter(Boolean);
+  return {
+    phase: "list",
+    status: "list",
+    outputDir: runtime.outputDir || null,
+    runs,
+    activeTasks: collectActive(runtime.active, /* @__PURE__ */ new Map()),
+    staleOrStalled: [],
+    counts: { total: runs.length },
+    statusEvents: runtime.statusEvents || void 0
+  };
+}
+function deriveRunStatusLite(run) {
+  if (typeof run.status === "string") return run.status;
+  if (run.error) return "failed";
+  if (num(run.failedTasks) || num(run.timedOutTasks)) return "failed";
+  if (num(run.blockedTasks)) return "blocked";
+  if (num(run.cancelledTasks)) return "cancelled";
+  const total = num(run.totalTasks);
+  if (total > 0 && num(run.completedTasks) + num(run.partialTasks) >= total) return "completed";
+  if (total > 0) return "running";
+  return "unknown";
+}
+function num(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+function pickNum(obj, keys) {
+  if (!obj || typeof obj !== "object") return void 0;
+  for (const key of keys) {
+    if (typeof obj[key] === "number" && Number.isFinite(obj[key])) return obj[key];
+  }
+  return void 0;
+}
+function statusKey(status) {
+  const text = String(status || "").toLowerCase();
+  if (text === "completed") return "completed";
+  if (text === "partial") return "partial";
+  if (text === "blocked") return "blocked";
+  if (text === "failed") return "failed";
+  if (text === "skipped") return "skipped";
+  if (text === "cancelled") return "cancelled";
+  if (text === "timed_out" || text === "timedout") return "timedOut";
+  return "partial";
+}
+function mapCheckStatus3(status) {
+  const text = String(status || "").toLowerCase();
+  if (["passed", "pass", "success", "succeeded", "ok", "completed"].includes(text)) return "passed";
+  if (["failed", "fail", "error"].includes(text)) return "failed";
+  if (["skipped", "skip"].includes(text)) return "skipped";
+  return "notRun";
+}
+function snippet(text, limit) {
+  const value = String(text == null ? "" : text).trim().replace(/\s+/g, " ");
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit - 3)}...`;
+}
+function trimEvent(event) {
+  if (!event || typeof event !== "object") return null;
+  const out = {};
+  for (const key of ["type", "timestamp", "taskId", "phase", "message", "summary", "reason", "label", "command", "status", "exitCode", "timedOut", "cancelled", "durationMs", "pid"]) {
+    if (event[key] !== void 0) out[key] = event[key];
+  }
+  if (out.timestamp === void 0 && event.ts !== void 0) out.timestamp = event.ts;
+  for (const key of ["message", "summary", "reason"]) {
+    if (typeof out[key] === "string") out[key] = snippet(out[key], SNIPPET_LIMIT);
+  }
+  return pruneUndefined(out);
+}
+function pruneUndefined(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return value;
+  const out = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (val === void 0) continue;
+    out[key] = val;
+  }
+  return out;
+}
+function pruneUndefinedArray(items) {
+  return items.map((item) => pruneUndefined(item));
+}
+
+// src/core/event-protocol.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+var EVENT_TYPES = Object.freeze({
+  TASK_STARTED: "task_started",
+  PROCESS_STARTED: "process_started",
+  PHASE_STARTED: "phase_started",
+  HEARTBEAT: "heartbeat",
+  CHECKPOINT: "checkpoint",
+  BLOCKED: "blocked",
+  COMMAND_STARTED: "command_started",
+  COMMAND_FINISHED: "command_finished",
+  PROCESS_EXITED: "process_exited",
+  TASK_COMPLETED: "task_completed",
+  TASK_PARTIAL: "task_partial",
+  TASK_FAILED: "task_failed",
+  TASK_CANCELLED: "task_cancelled",
+  TASK_TIMED_OUT: "task_timed_out",
+  TASK_BLOCKED: "task_blocked"
+});
+var TERMINAL_EVENT_TO_STATUS = Object.freeze({
+  [EVENT_TYPES.TASK_COMPLETED]: "completed",
+  [EVENT_TYPES.TASK_PARTIAL]: "partial",
+  [EVENT_TYPES.TASK_FAILED]: "failed",
+  [EVENT_TYPES.TASK_CANCELLED]: "cancelled",
+  [EVENT_TYPES.TASK_TIMED_OUT]: "timed_out",
+  [EVENT_TYPES.TASK_BLOCKED]: "blocked"
+});
+var ALL_EVENT_TYPES = new Set(Object.values(EVENT_TYPES));
+var DEFAULT_STALE_HEARTBEAT_MS = 9e4;
+var DEFAULT_SLOW_EVENT_MS = 18e4;
+function normalizeEvent(raw) {
+  if (!isPlainObject3(raw)) return null;
+  const event = { ...raw };
+  const timestamp = event.timestamp ?? event.ts;
+  if (timestamp !== void 0) event.timestamp = timestamp;
+  delete event.ts;
+  return event;
+}
+var TRIMMED_FIELDS = [
+  "type",
+  "timestamp",
+  "runId",
+  "taskId",
+  "phase",
+  "message",
+  "summary",
+  "reason",
+  "label",
+  "command",
+  "status",
+  "exitCode",
+  "signal",
+  "timedOut",
+  "cancelled",
+  "durationMs",
+  "pid",
+  "title",
+  "kind",
+  "dryRun",
+  "sequence",
+  "progress",
+  "severity",
+  "needsController",
+  "etaSeconds",
+  "source",
+  "lastActivityAt"
+];
+function trimEvent2(event) {
+  if (!isPlainObject3(event)) return null;
+  const out = {};
+  for (const key of TRIMMED_FIELDS) {
+    if (event[key] !== void 0) out[key] = event[key];
+  }
+  const ts = out.timestamp ?? event.ts;
+  if (ts !== void 0) out.timestamp = ts;
+  return out;
+}
+function summarizeEventList(events, eventLogPath) {
+  const summary = {
+    eventLogPath: eventLogPath || void 0,
+    eventCount: 0,
+    malformedEventCount: 0,
+    lastEventAt: void 0,
+    lastHeartbeatAt: void 0,
+    latestCheckpointAt: void 0,
+    phase: void 0,
+    blockedReason: void 0,
+    latestSummary: void 0,
+    terminalStatus: void 0,
+    needsControllerFlag: false,
+    etaSeconds: void 0,
+    // Internal: type of the most recent "significant" event (terminal, blocked,
+    // heartbeat, checkpoint). Used so statusHint reflects current state rather
+    // than the sticky blockedReason field. Stripped from summarizeEvents output.
+    lastSignificantType: void 0
+  };
+  const SIGNIFICANT = /* @__PURE__ */ new Set([
+    EVENT_TYPES.BLOCKED,
+    EVENT_TYPES.HEARTBEAT,
+    EVENT_TYPES.CHECKPOINT,
+    ...Object.keys(TERMINAL_EVENT_TO_STATUS)
+  ]);
+  const list = Array.isArray(events) ? events : [];
+  for (const raw of list) {
+    if (!isPlainObject3(raw)) {
+      summary.malformedEventCount++;
+      continue;
+    }
+    const event = normalizeEvent(raw);
+    summary.eventCount++;
+    const { type } = event;
+    const ts = event.timestamp;
+    const epoch = toEpochMs(ts);
+    if (epoch !== void 0) summary.lastEventAt = ts;
+    if (type === EVENT_TYPES.HEARTBEAT && epoch !== void 0) {
+      summary.lastHeartbeatAt = ts;
+    }
+    if (type === EVENT_TYPES.PHASE_STARTED) {
+      summary.phase = event.phase || event.phaseName || event.message || summary.phase;
+    }
+    if (type === EVENT_TYPES.BLOCKED || type === "block" || type === "stuck") {
+      summary.blockedReason = event.reason || event.message || summary.blockedReason;
+    }
+    if (type === EVENT_TYPES.CHECKPOINT && epoch !== void 0) {
+      summary.latestCheckpointAt = ts;
+    }
+    if (type === EVENT_TYPES.CHECKPOINT || type === EVENT_TYPES.HEARTBEAT || type === "message" || type === "summary") {
+      const text = event.summary || event.message;
+      if (text) summary.latestSummary = text;
+    }
+    if (TERMINAL_EVENT_TO_STATUS[type]) {
+      summary.terminalStatus = TERMINAL_EVENT_TO_STATUS[type];
+    }
+    if (SIGNIFICANT.has(type)) {
+      summary.lastSignificantType = type;
+    }
+    if (event.needsController === true) summary.needsControllerFlag = true;
+    if (event.etaSeconds !== void 0) summary.etaSeconds = event.etaSeconds;
+  }
+  return summary;
+}
+function assessHeartbeat(summaryOrEvents, options = {}) {
+  const base = Array.isArray(summaryOrEvents) ? summarizeEventList(summaryOrEvents) : isPlainObject3(summaryOrEvents) ? summaryOrEvents : {};
+  const staleHeartbeatMs = numberOr(options.staleHeartbeatMs, DEFAULT_STALE_HEARTBEAT_MS);
+  const slowEventMs = numberOr(options.slowEventMs, DEFAULT_SLOW_EVENT_MS);
+  const nowMs = resolveNow(options.now);
+  const heartbeatMs = toEpochMs(base.lastHeartbeatAt);
+  const eventMs = toEpochMs(base.lastEventAt);
+  const livenessMs = heartbeatMs !== void 0 ? heartbeatMs : eventMs;
+  const heartbeatAgeMs = livenessMs !== void 0 ? Math.max(0, nowMs - livenessMs) : void 0;
+  const eventAgeMs = eventMs !== void 0 ? Math.max(0, nowMs - eventMs) : void 0;
+  const terminal = Boolean(base.terminalStatus);
+  const stalled = !terminal && heartbeatAgeMs !== void 0 && heartbeatAgeMs >= staleHeartbeatMs;
+  const slow = !terminal && eventAgeMs !== void 0 && eventAgeMs >= slowEventMs;
+  const explicitNeed = Boolean(base.needsControllerFlag);
+  const needsController = terminal ? false : stalled || explicitNeed;
+  const statusHint = deriveStatusHint(base, { stalled, slow });
+  return { heartbeatAgeMs, stalled, slow, needsController, statusHint };
+}
+function deriveStatusHint(base, { stalled, slow }) {
+  if (base.terminalStatus) return base.terminalStatus;
+  if (base.lastSignificantType === EVENT_TYPES.BLOCKED) return "blocked";
+  if (base.lastSignificantType === void 0 && base.blockedReason) return "blocked";
+  if (stalled) return "stalled";
+  if (slow) return "slow";
+  if (base.lastEventAt) return "running";
+  return "unknown";
+}
+function isPlainObject3(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function toEpochMs(value) {
+  if (value === void 0 || value === null) return void 0;
+  const ms = typeof value === "number" ? value : Date.parse(value);
+  return Number.isFinite(ms) ? ms : void 0;
+}
+function numberOr(value, fallback) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+function resolveNow(now) {
+  if (typeof now === "function") {
+    const value = now();
+    return typeof value === "number" && Number.isFinite(value) ? value : Date.now();
+  }
+  if (typeof now === "number" && Number.isFinite(now)) return now;
+  return Date.now();
+}
+
+// src/core/ownership.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+var READ_ONLY_KINDS = /* @__PURE__ */ new Set(["review", "verify"]);
+function resolveSegments(segments) {
+  const out = [];
+  for (const seg of segments) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      if (out.length && out[out.length - 1] !== ".." && !/^[A-Za-z]:$/.test(out[out.length - 1])) {
+        out.pop();
+      }
+      continue;
+    }
+    out.push(seg);
+  }
+  return out;
+}
+function normalizePath(rawPath, workspace) {
+  if (!rawPath || typeof rawPath !== "string") return "";
+  let text = rawPath.replace(/\\/g, "/");
+  let prefix = "";
+  const driveMatch = text.match(/^([A-Za-z]:)(\/?)(.*)$/);
+  const uncMatch = !driveMatch && text.match(/^(\/\/[^/]+\/[^/]*)(\/?)(.*)$/);
+  if (driveMatch) {
+    prefix = driveMatch[1] + "/";
+    text = driveMatch[3];
+  } else if (uncMatch) {
+    prefix = uncMatch[1] + "/";
+    text = uncMatch[3];
+  }
+  const absolute = text.startsWith("/");
+  const segments = resolveSegments(text.split("/"));
+  let normalized = (absolute ? "/" : "") + segments.join("/");
+  if (prefix) normalized = prefix + normalized.replace(/^\//, "");
+  if (workspace) {
+    const wsKey = pathKey(normalizePath(workspace));
+    const key = pathKey(normalized);
+    if (key === wsKey) return ".";
+    if (key.startsWith(wsKey + "/")) {
+      return normalized.slice(pathKeyDisplayLength(workspace) + 1);
+    }
+  }
+  return normalized || ".";
+}
+function pathKeyDisplayLength(workspace) {
+  return normalizePath(workspace).length;
+}
+function pathKey(normalizedPath) {
+  return String(normalizedPath || "").toLowerCase();
+}
+function coerceChangedFiles(value, workspace) {
+  if (!Array.isArray(value)) return [];
+  const out = [];
+  for (const item of value) {
+    const raw = typeof item === "string" ? item : String(item?.path || item?.file || item?.filePath || "");
+    const normalized = normalizePath(raw, workspace);
+    if (normalized) out.push(normalized);
+  }
+  return out;
+}
+function deriveTaskOwnership(task) {
+  const t = task || {};
+  const workspace = t.workspace;
+  const explicitOwned = coerceFileList(t.ownedFiles, workspace);
+  const explicitAllowed = coerceFileList(t.allowedFiles, workspace);
+  const explicitReadOnly = t.readOnly === true;
+  const kindReadOnly = READ_ONLY_KINDS.has(String(t.kind || "").toLowerCase());
+  const readOnly = explicitReadOnly || kindReadOnly;
+  let source = "none";
+  const explicitPresent = explicitOwned.length || explicitAllowed.length || t.readOnly === true;
+  let ownedFiles = explicitOwned;
+  let allowedFiles = explicitAllowed;
+  if (!explicitOwned.length && !explicitAllowed.length) {
+    const fromPrompt = parseOwnedFilesFromPrompt(t.prompt, workspace);
+    if (fromPrompt.length) {
+      ownedFiles = fromPrompt;
+      source = "prompt";
+    }
+  }
+  if (explicitPresent && source === "prompt") source = "mixed";
+  else if (explicitPresent) source = "explicit";
+  return { ownedFiles, allowedFiles, readOnly, source, workspace };
+}
+function coerceFileList(value, workspace) {
+  if (!Array.isArray(value)) return [];
+  const out = [];
+  for (const item of value) {
+    const raw = typeof item === "string" ? item : String(item?.path || item?.file || item?.filePath || "");
+    const normalized = normalizePath(raw, workspace);
+    if (normalized) out.push(normalized);
+  }
+  return out;
+}
+var OWNED_PROMPT_RE = /(?:owned\s*files?|files?\s+you\s+(?:may|can)\s+edit|edit\s+(?:only\s+)?(?:these\s+)?files?)\s*[:\uFF1A]\s*([^\n]+)/i;
+function parseOwnedFilesFromPrompt(prompt, workspace) {
+  if (typeof prompt !== "string" || !prompt) return [];
+  const match = prompt.match(OWNED_PROMPT_RE);
+  if (!match) return [];
+  const cleaned = match[1].replace(/\s*\bonly\b\.?/gi, "").replace(/[.;\s]+$/, "").trim();
+  const list = cleaned.split(/,|\n|\s+and\s+/i).map((s) => s.trim()).filter(Boolean);
+  return coerceFileList(list, workspace);
+}
+function keySet(paths) {
+  const set2 = /* @__PURE__ */ new Set();
+  for (const p of paths) set2.add(pathKey(p));
+  return set2;
+}
+function validateTaskFileOwnership({ task, result, changedFiles, workspace } = {}) {
+  const t = task || {};
+  const ws = workspace || t.workspace;
+  const ownership = deriveTaskOwnership({ ...t, workspace: ws });
+  const rawChanged = changedFiles ?? result?.filesChanged ?? result?.files_changed ?? [];
+  const changed = coerceChangedFiles(rawChanged, ws);
+  const violations = [];
+  const warnings = [];
+  if (!changed.length) {
+    return { violations, warnings };
+  }
+  const allowedKeys = keySet([...ownership.ownedFiles, ...ownership.allowedFiles]);
+  for (const file2 of changed) {
+    if (ownership.readOnly) {
+      violations.push({
+        type: "read_only_task_edit",
+        taskId: t.id,
+        path: file2,
+        message: `Read-only task "${t.id}" modified file ${file2}.`
+      });
+      continue;
+    }
+    if (ownership.source === "none") {
+      warnings.push({
+        type: "ownership_undeclared",
+        taskId: t.id,
+        path: file2,
+        message: `Task "${t.id}" has no declared file ownership; cannot verify ${file2}.`
+      });
+      continue;
+    }
+    if (!allowedKeys.has(pathKey(file2))) {
+      violations.push({
+        type: "file_outside_ownership",
+        taskId: t.id,
+        path: file2,
+        message: `Task "${t.id}" modified ${file2}, which is outside its declared owned/allowed files.`
+      });
+    }
+  }
+  return { violations, warnings };
+}
+function coerceResults(results, workspace) {
+  const entries = [];
+  if (Array.isArray(results)) {
+    for (const r of results) {
+      if (!r) continue;
+      entries.push({
+        taskId: r.taskId || r.id || r.task_id || null,
+        filesChanged: coerceChangedFiles(changedFilesFromResult(r), workspace)
+      });
+    }
+  } else if (results && typeof results === "object") {
+    for (const [taskId, r] of Object.entries(results)) {
+      if (!r) continue;
+      entries.push({
+        taskId: r.taskId || r.id || taskId,
+        filesChanged: coerceChangedFiles(changedFilesFromResult(r), workspace)
+      });
+    }
+  }
+  return entries;
+}
+function changedFilesFromResult(result) {
+  if (!result || typeof result !== "object") return [];
+  return result.filesChanged || result.files_changed || result.changedFiles || result.parsed?.filesChanged || result.parsed?.files_changed || result.parsed?.changedFiles || [];
+}
+function validateRunFileOwnership({ tasks, results, workspace } = {}) {
+  const taskList = Array.isArray(tasks) ? tasks : [];
+  const ws = workspace;
+  const taskById = /* @__PURE__ */ new Map();
+  for (const t of taskList) {
+    if (t && t.id) taskById.set(String(t.id), t);
+  }
+  const resultEntries = coerceResults(results, ws);
+  const violations = [];
+  const warnings = [];
+  const collisions = [];
+  for (const entry of resultEntries) {
+    if (!entry.taskId) continue;
+    const task = taskById.get(String(entry.taskId)) || { id: entry.taskId, workspace: ws };
+    const { violations: v, warnings: w } = validateTaskFileOwnership({
+      task,
+      changedFiles: entry.filesChanged,
+      workspace: ws
+    });
+    violations.push(...v);
+    warnings.push(...w);
+  }
+  const ownersByKey = /* @__PURE__ */ new Map();
+  for (const entry of resultEntries) {
+    if (!entry.taskId) continue;
+    for (const file2 of entry.filesChanged) {
+      const key = pathKey(file2);
+      if (!ownersByKey.has(key)) ownersByKey.set(key, { path: file2, tasks: /* @__PURE__ */ new Set() });
+      ownersByKey.get(key).tasks.add(String(entry.taskId));
+    }
+  }
+  for (const { path: file2, tasks: taskSet } of ownersByKey.values()) {
+    if (taskSet.size > 1) {
+      const taskIds = [...taskSet];
+      collisions.push({
+        type: "file_collision",
+        path: file2,
+        taskIds,
+        message: `File ${file2} was modified by ${taskIds.length} tasks: ${taskIds.join(", ")}.`
+      });
+      violations.push({
+        type: "file_collision",
+        path: file2,
+        taskIds,
+        message: `File ${file2} was modified by ${taskIds.length} tasks: ${taskIds.join(", ")}.`
+      });
+    }
+  }
+  return { violations, warnings, collisions };
+}
+
+// src/core/run-registry.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+import fs5 from "node:fs/promises";
+import os4 from "node:os";
+import path5 from "node:path";
+var REGISTRY_FILENAME = ".scp-run-registry.json";
+var DEFAULT_STALE_AFTER_MS = 5 * 60 * 1e3;
+function hasEnded(summary) {
+  return Boolean(summary && typeof summary === "object" && summary.endedAt);
+}
+function deriveRunStatus(summary) {
+  if (!summary || typeof summary !== "object") return "unknown";
+  if (typeof summary.status === "string") return summary.status;
+  if (summary.error) return "failed";
+  if ((summary.cancelledTasks || 0) > 0) return "cancelled";
+  if ((summary.failedTasks || 0) > 0 || (summary.timedOutTasks || 0) > 0) return "failed";
+  if ((summary.blockedTasks || 0) > 0) return "blocked";
+  const total = summary.totalTasks || 0;
+  const finished = (summary.completedTasks || 0) + (summary.partialTasks || 0);
+  if (total > 0 && finished >= total) return "completed";
+  return "running";
+}
+function emptyRegistry(outputDir) {
+  return { version: 1, outputDir: path5.resolve(outputDir), updatedAt: null, runs: {} };
+}
+function registryPath(outputDir) {
+  return path5.join(path5.resolve(outputDir), REGISTRY_FILENAME);
+}
+async function readRunRegistry(outputDir) {
+  const filePath = registryPath(outputDir);
+  let parsed;
+  try {
+    parsed = await readJson(filePath);
+  } catch {
+    return emptyRegistry(outputDir);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return emptyRegistry(outputDir);
+  }
+  const runs = parsed.runs && typeof parsed.runs === "object" && !Array.isArray(parsed.runs) ? parsed.runs : {};
+  return {
+    version: 1,
+    outputDir: path5.resolve(outputDir),
+    updatedAt: parsed.updatedAt || null,
+    runs
+  };
+}
+async function writeRegistryAtomic(outputDir, registry2) {
+  const filePath = registryPath(outputDir);
+  await fs5.mkdir(path5.dirname(filePath), { recursive: true });
+  const payload = {
+    version: 1,
+    outputDir: path5.resolve(outputDir),
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    runs: registry2.runs || {}
+  };
+  const tmp = `${filePath}.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
+  await fs5.writeFile(tmp, JSON.stringify(payload, null, 2) + os4.EOL, "utf8");
+  try {
+    await fs5.rename(tmp, filePath);
+  } catch (error51) {
+    try {
+      await fs5.unlink(tmp);
+    } catch {
+    }
+    throw error51;
+  }
+  return payload;
+}
+async function writeRunRegistryEntry(outputDir, entry = {}) {
+  if (!entry || !entry.runId) {
+    throw new Error("writeRunRegistryEntry requires entry.runId");
+  }
+  const registry2 = await readRunRegistry(outputDir);
+  const existing = registry2.runs[entry.runId] || {};
+  const merged = {
+    ...existing,
+    ...entry,
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  if (!merged.runDir && existing.runDir) merged.runDir = existing.runDir;
+  registry2.runs[entry.runId] = merged;
+  await writeRegistryAtomic(outputDir, registry2);
+  return merged;
+}
+async function markRunRegistryEntry(outputDir, runId, status, extra = {}) {
+  if (!runId) throw new Error("markRunRegistryEntry requires runId");
+  return writeRunRegistryEntry(outputDir, {
+    runId,
+    markedStatus: status,
+    ...extra
+  });
+}
+async function resolveRunDirFromRegistry(outputDir, runId) {
+  if (!runId) return null;
+  const registry2 = await readRunRegistry(outputDir);
+  const entry = registry2.runs[runId];
+  return entry?.runDir || null;
+}
+async function readEventsFile(eventsPath) {
+  let text;
+  try {
+    text = await fs5.readFile(eventsPath, "utf8");
+  } catch {
+    return [];
+  }
+  const events = [];
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const event = JSON.parse(trimmed);
+      if (event && typeof event === "object" && !Array.isArray(event)) events.push(event);
+    } catch {
+    }
+  }
+  return events;
+}
+async function collectTaskEntries(summary, runDir) {
+  const entries = [];
+  if (summary && Array.isArray(summary.tasks)) {
+    for (const task of summary.tasks) {
+      if (!task) continue;
+      entries.push({ id: task.id, taskDir: task.taskDir, eventLogPath: task.eventLogPath });
+    }
+  }
+  if (entries.length === 0 && runDir) {
+    const tasksDir = path5.join(runDir, "tasks");
+    let names = [];
+    try {
+      names = await fs5.readdir(tasksDir, { withFileTypes: true });
+    } catch {
+      return entries;
+    }
+    for (const ent of names) {
+      if (!ent.isDirectory()) continue;
+      entries.push({ id: ent.name, taskDir: path5.join(tasksDir, ent.name), eventLogPath: null });
+    }
+  }
+  return entries;
+}
+function eventTimestamp(event) {
+  return event?.timestamp || event?.ts || null;
+}
+async function latestHeartbeat(runDir, summary) {
+  const entries = await collectTaskEntries(summary, runDir);
+  let latest = null;
+  for (const entry of entries) {
+    const eventsPath = entry.eventLogPath || (entry.taskDir ? path5.join(entry.taskDir, "events.jsonl") : null);
+    if (!eventsPath) continue;
+    const events = await readEventsFile(eventsPath);
+    for (const event of events) {
+      const ts = eventTimestamp(event);
+      if (ts && (!latest || ts > latest)) latest = ts;
+    }
+  }
+  return latest;
+}
+async function allTaskResultsPresent(runDir, input) {
+  const tasks = Array.isArray(input?.tasks) ? input.tasks : [];
+  if (!tasks.length) return false;
+  for (const task of tasks) {
+    if (!task?.id) return false;
+    try {
+      await fs5.access(path5.join(runDir, "tasks", task.id, "result.json"));
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+async function gatherRunState(runDir) {
+  let input = null;
+  let summary = null;
+  try {
+    input = await readJson(path5.join(runDir, "run-input.json"));
+  } catch {
+    input = null;
+  }
+  try {
+    summary = await readJson(path5.join(runDir, "run-summary.json"));
+  } catch {
+    summary = null;
+  }
+  const heartbeat = await latestHeartbeat(runDir, summary);
+  return { runDir, input, summary, heartbeat };
+}
+function heartbeatIsFresh(heartbeat, staleAfterMs, now = Date.now()) {
+  if (!heartbeat) return false;
+  const parsed = Date.parse(heartbeat);
+  if (!Number.isFinite(parsed)) return false;
+  return now - parsed <= staleAfterMs;
+}
+function classifyRun(state, options = {}) {
+  const { summary, input } = state;
+  if (!summary && !input) return "unknown";
+  if (hasEnded(summary)) return "completed";
+  const staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
+  const now = options.now ?? Date.now();
+  if (heartbeatIsFresh(state.heartbeat, staleAfterMs, now)) return "active";
+  return state.allResultsPresent ? "recovered" : "orphaned";
+}
+async function recoverRunsFromOutputDir(outputDir, options = {}) {
+  const resolved = path5.resolve(outputDir);
+  const staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
+  const now = options.now ?? Date.now();
+  let entries = [];
+  try {
+    entries = await fs5.readdir(resolved, { withFileTypes: true });
+  } catch {
+    return {
+      outputDir: resolved,
+      registryPath: registryPath(resolved),
+      runs: [],
+      counts: { active: 0, completed: 0, recovered: 0, orphaned: 0, unknown: 0 },
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  const runs = [];
+  const registry2 = emptyRegistry(resolved);
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const runDir = path5.join(resolved, entry.name);
+    const state = await gatherRunState(runDir);
+    if (!state.summary && !state.input) continue;
+    const allResultsPresent = await allTaskResultsPresent(runDir, state.input);
+    const classification = classifyRun(
+      { ...state, allResultsPresent },
+      { staleAfterMs, now }
+    );
+    const runId = state.summary && state.summary.runId || state.input && state.input.runId || entry.name;
+    const runStatus = state.summary ? deriveRunStatus(state.summary) : null;
+    const record2 = {
+      runId,
+      runDir,
+      outputDir: resolved,
+      startedAt: state.input && state.input.startedAt || state.summary && state.summary.startedAt || null,
+      endedAt: state.summary && state.summary.endedAt || null,
+      status: classification,
+      runStatus,
+      taskCount: state.input && state.input.taskCount || state.summary && state.summary.totalTasks || null,
+      heartbeat: state.heartbeat,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    runs.push(record2);
+    registry2.runs[runId] = record2;
+  }
+  await writeRegistryAtomic(resolved, registry2);
+  const counts = { active: 0, completed: 0, recovered: 0, orphaned: 0, unknown: 0 };
+  for (const run of runs) {
+    if (counts[run.status] !== void 0) counts[run.status] += 1;
+  }
+  return {
+    outputDir: resolved,
+    registryPath: registryPath(resolved),
+    runs,
+    counts,
+    updatedAt: registry2.updatedAt
+  };
+}
+
 // src/core/scheduler.mjs
-var packageRoot = path3.resolve(path3.dirname(fileURLToPath(import.meta.url)), "..", "..");
-var resultSchemaPath = path3.join(packageRoot, "schemas", "agent-result.schema.json");
+var packageRoot = path6.resolve(path6.dirname(fileURLToPath(import.meta.url)), "..", "..");
+var resultSchemaPath = path6.join(packageRoot, "schemas", "agent-result.schema.json");
 var activeRuns = /* @__PURE__ */ new Map();
 var retainedRuns = /* @__PURE__ */ new Map();
 var RETAINED_RUN_LIMIT = 100;
@@ -32133,11 +33935,11 @@ async function runTaskPlan(plan, options = {}) {
 }
 async function prepareRun(plan, options = {}) {
   assertPlanShape(plan);
-  const planDir = path3.resolve(options.planDir || process.cwd());
-  const workspace = path3.resolve(planDir, String(options.workspace || plan.workspace || "."));
-  const outputDir = path3.resolve(
+  const planDir = path6.resolve(options.planDir || process.cwd());
+  const workspace = path6.resolve(planDir, String(options.workspace || plan.workspace || "."));
+  const outputDir = path6.resolve(
     planDir,
-    String(options.outputDir || plan.outputDir || path3.join(workspace, ".subagent-runs"))
+    String(options.outputDir || plan.outputDir || path6.join(workspace, ".subagent-runs"))
   );
   const concurrency = Number(options.concurrency || plan.concurrency || 1);
   const dryRun = Boolean(options.dryRun || plan.dryRun);
@@ -32145,7 +33947,7 @@ async function prepareRun(plan, options = {}) {
     throw new Error("concurrency must be a positive integer");
   }
   const runId = options.runId || createRunId();
-  const runDir = path3.join(outputDir, runId);
+  const runDir = path6.join(outputDir, runId);
   const startedAt = (/* @__PURE__ */ new Date()).toISOString();
   const schema = options.schema || define_SCP_RESULT_SCHEMA_INLINE_default;
   const claudeExecutable = await resolveClaudeExecutable(
@@ -32157,8 +33959,8 @@ async function prepareRun(plan, options = {}) {
   );
   const tasks = plan.tasks.map((task) => normalizeTask(task, plan.defaults || {}, workspace, planDir));
   validateDependencies(tasks);
-  await fs4.mkdir(path3.join(runDir, "tasks"), { recursive: true });
-  await writeJson(path3.join(runDir, "run-input.json"), {
+  await fs6.mkdir(path6.join(runDir, "tasks"), { recursive: true });
+  await writeJson(path6.join(runDir, "run-input.json"), {
     runId,
     runDir,
     outputDir,
@@ -32174,6 +33976,16 @@ async function prepareRun(plan, options = {}) {
       dependsOn: task.dependsOn,
       timeoutMs: task.timeoutMs
     }))
+  });
+  await writeRunRegistryEntry(outputDir, {
+    runId,
+    runDir,
+    outputDir,
+    workspace,
+    startedAt,
+    status: "active",
+    taskCount: tasks.length
+  }).catch(() => {
   });
   const cancellation = {
     cancelled: false,
@@ -32207,7 +34019,13 @@ async function executeRun(scheduler, tasks) {
   const results = await runTasks(tasks, scheduler);
   const endedAt = (/* @__PURE__ */ new Date()).toISOString();
   const summary = summarizeRun({ ...scheduler, endedAt }, tasks, results);
-  await writeJson(path3.join(scheduler.runDir, "run-summary.json"), summary);
+  attachOwnershipValidation(summary, tasks, results, scheduler.workspace);
+  await writeJson(path6.join(scheduler.runDir, "run-summary.json"), summary);
+  await markRunRegistryEntry(scheduler.outputDir, scheduler.runId, deriveRunStatus2(summary), {
+    runDir: scheduler.runDir,
+    endedAt
+  }).catch(() => {
+  });
   return summary;
 }
 async function startTaskPlan(plan, options = {}) {
@@ -32216,7 +34034,7 @@ async function startTaskPlan(plan, options = {}) {
   activeRuns.set(scheduler.runId, scheduler.cancellation);
   const background = executeRun(scheduler, tasks).then((summary) => {
     scheduler.cancellation.summary = summary;
-    scheduler.cancellation.status = deriveRunStatus(summary);
+    scheduler.cancellation.status = deriveRunStatus2(summary);
   }).catch(async (error51) => {
     scheduler.cancellation.error = error51;
     scheduler.cancellation.status = "failed";
@@ -32245,7 +34063,7 @@ async function startTaskPlan(plan, options = {}) {
 }
 async function collectRun(input = {}) {
   const runId = input.runId;
-  let runDir = input.runDir ? path3.resolve(input.runDir) : null;
+  let runDir = input.runDir ? path6.resolve(input.runDir) : null;
   if (!runDir && runId) {
     const record2 = activeRuns.get(runId);
     if (record2?.runDir) runDir = record2.runDir;
@@ -32255,29 +34073,37 @@ async function collectRun(input = {}) {
     if (record2?.runDir) runDir = record2.runDir;
   }
   if (!runDir && runId && input.outputDir) {
-    const candidateRunDir = path3.join(path3.resolve(input.outputDir), runId);
+    runDir = await resolveRunDirFromRegistry(path6.resolve(input.outputDir), runId).catch(() => null);
+  }
+  if (!runDir && runId && input.outputDir) {
+    const candidateRunDir = path6.join(path6.resolve(input.outputDir), runId);
     try {
-      await fs4.access(candidateRunDir);
+      await fs6.access(candidateRunDir);
       runDir = candidateRunDir;
     } catch {
       runDir = null;
     }
   }
   if (!runDir && runId) {
-    const defaultOutputDir = input.outputDir || path3.join(path3.resolve(input.workspace || process.cwd()), ".subagent-runs");
-    const defaultRunDir = path3.join(path3.resolve(defaultOutputDir), runId);
+    const defaultOutputDir = input.outputDir || path6.join(path6.resolve(input.workspace || process.cwd()), ".subagent-runs");
+    const defaultRunDir = path6.join(path6.resolve(defaultOutputDir), runId);
     try {
-      await fs4.access(defaultRunDir);
+      runDir = await resolveRunDirFromRegistry(path6.resolve(defaultOutputDir), runId).catch(() => null);
+      if (runDir) throw new Error("__resolved_from_registry__");
+      await fs6.access(defaultRunDir);
       runDir = defaultRunDir;
-    } catch {
-      runDir = null;
+    } catch (error51) {
+      if (error51?.message === "__resolved_from_registry__") {
+      } else {
+        runDir = null;
+      }
     }
   }
   if (!runDir) {
     throw new Error("collectRun requires runDir, an active runId, or outputDir with runId");
   }
-  const resolvedRunId = runId || path3.basename(runDir);
-  const summaryPath = path3.join(runDir, "run-summary.json");
+  const resolvedRunId = runId || path6.basename(runDir);
+  const summaryPath = path6.join(runDir, "run-summary.json");
   let summary = null;
   try {
     summary = await readJson(summaryPath);
@@ -32287,23 +34113,36 @@ async function collectRun(input = {}) {
   if (!summary) summary = await recoverSummaryFromTaskResults(runDir);
   if (summary) {
     const eventView = await buildRunEventView(summary, runDir, {
-      recentEventsLimit: input.recentEventsLimit
+      recentEventsLimit: input.recentEventsLimit,
+      staleHeartbeatMs: input.staleHeartbeatMs,
+      slowEventMs: input.slowEventMs
     });
-    return {
+    const payload2 = {
       done: true,
       runId: summary.runId || resolvedRunId,
       runDir,
-      status: deriveRunStatus(summary),
+      status: deriveRunStatus2(summary),
       summary,
       runSummary: summary,
       results: Array.isArray(summary.tasks) ? summary.tasks : [],
       active: listActiveProcesses(summary.runId || resolvedRunId),
       recentEvents: eventView.recentEvents,
-      taskEvents: eventView.taskEvents
+      taskEvents: eventView.taskEvents,
+      health: eventView.health
     };
+    if (input.includeControllerSummary !== false) {
+      payload2.controllerSummary = buildControllerSummary(payload2);
+    }
+    return payload2;
   }
-  const progress = await loadRunStatus({ runDir, recentEventsLimit: input.recentEventsLimit });
-  return {
+  const progress = await loadRunStatus({
+    runDir,
+    recentEventsLimit: input.recentEventsLimit,
+    staleHeartbeatMs: input.staleHeartbeatMs,
+    slowEventMs: input.slowEventMs,
+    includeControllerSummary: input.includeControllerSummary
+  });
+  const payload = {
     done: false,
     runId: resolvedRunId,
     runDir,
@@ -32312,8 +34151,25 @@ async function collectRun(input = {}) {
     summary: progress.summary,
     active: progress.active,
     recentEvents: progress.recentEvents,
-    taskEvents: progress.taskEvents
+    taskEvents: progress.taskEvents,
+    health: progress.health,
+    controllerSummary: progress.controllerSummary
   };
+  return payload;
+}
+async function watchRun(input = {}) {
+  const collected = await collectRun(input);
+  const health = collected.health || summarizeRunHealth(collected.taskEvents || [], collected.active || []);
+  const suggestedAction = suggestControllerAction(collected, health);
+  const payload = {
+    ...collected,
+    health,
+    suggestedAction
+  };
+  if (input.includeControllerSummary !== false) {
+    payload.controllerSummary = collected.controllerSummary || buildControllerSummary(collected);
+  }
+  return input.compact || input.healthOnly ? compactWatchPayload(payload, input) : payload;
 }
 function retainRunHandle(record2) {
   if (!record2?.runId || !record2?.runDir) return;
@@ -32333,7 +34189,7 @@ function retainRunHandle(record2) {
 async function recoverSummaryFromTaskResults(runDir) {
   let input;
   try {
-    input = await readJson(path3.join(runDir, "run-input.json"));
+    input = await readJson(path6.join(runDir, "run-input.json"));
   } catch {
     return null;
   }
@@ -32342,7 +34198,7 @@ async function recoverSummaryFromTaskResults(runDir) {
   const results = [];
   for (const task of tasks) {
     try {
-      results.push(await readJson(path3.join(runDir, "tasks", task.id, "result.json")));
+      results.push(await readJson(path6.join(runDir, "tasks", task.id, "result.json")));
     } catch {
       return null;
     }
@@ -32350,7 +34206,7 @@ async function recoverSummaryFromTaskResults(runDir) {
   const endedAt = (/* @__PURE__ */ new Date()).toISOString();
   const summary = summarizeRun(
     {
-      runId: input.runId || path3.basename(runDir),
+      runId: input.runId || path6.basename(runDir),
       runDir,
       startedAt: input.startedAt,
       endedAt,
@@ -32365,7 +34221,7 @@ async function recoverSummaryFromTaskResults(runDir) {
   summary.recovered = true;
   return summary;
 }
-function deriveRunStatus(summary) {
+function deriveRunStatus2(summary) {
   if (!summary || typeof summary !== "object") return "unknown";
   if (typeof summary.status === "string") return summary.status;
   if (summary.error) return "failed";
@@ -32384,7 +34240,13 @@ async function writeFailureSummary(scheduler, tasks, error51) {
   summary.status = "failed";
   summary.error = error51?.stack || String(error51);
   summary.endedAt = endedAt;
-  await writeJson(path3.join(scheduler.runDir, "run-summary.json"), summary);
+  attachOwnershipValidation(summary, tasks, results, scheduler.workspace);
+  await writeJson(path6.join(scheduler.runDir, "run-summary.json"), summary);
+  await markRunRegistryEntry(scheduler.outputDir, scheduler.runId, "failed", {
+    runDir: scheduler.runDir,
+    endedAt
+  }).catch(() => {
+  });
   return summary;
 }
 async function collectPersistedTaskResults(runDir, tasks, scheduler) {
@@ -32392,9 +34254,9 @@ async function collectPersistedTaskResults(runDir, tasks, scheduler) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const results = [];
   for (const task of tasks) {
-    const taskDir = path3.join(runDir, "tasks", task.id);
+    const taskDir = path6.join(runDir, "tasks", task.id);
     try {
-      results.push(await readJson(path3.join(taskDir, "result.json")));
+      results.push(await readJson(path6.join(taskDir, "result.json")));
     } catch {
       results.push({
         id: task.id,
@@ -32410,38 +34272,48 @@ async function collectPersistedTaskResults(runDir, tasks, scheduler) {
   return results;
 }
 var DEFAULT_RECENT_EVENTS_LIMIT = 20;
-async function loadRunStatus({ runDir, outputDir, limit = 20, recentEventsLimit } = {}) {
+async function loadRunStatus({ runDir, outputDir, limit = 20, recentEventsLimit, staleHeartbeatMs, slowEventMs, includeControllerSummary } = {}) {
   if (runDir) {
-    const resolved = path3.resolve(runDir);
-    const summaryPath = path3.join(resolved, "run-summary.json");
+    const resolved = path6.resolve(runDir);
+    const summaryPath = path6.join(resolved, "run-summary.json");
     let summary;
     try {
       summary = await readJson(summaryPath);
     } catch {
       summary = await readRunInputFallback(resolved);
     }
-    const runId = summary?.runId || path3.basename(resolved);
-    const eventView = await buildRunEventView(summary, resolved, { recentEventsLimit });
-    return {
+    const runId = summary?.runId || path6.basename(resolved);
+    const eventView = await buildRunEventView(summary, resolved, {
+      recentEventsLimit,
+      staleHeartbeatMs,
+      slowEventMs
+    });
+    const payload = {
       mode: "single",
       summary,
       active: listActiveProcesses(runId),
       recentEvents: eventView.recentEvents,
-      taskEvents: eventView.taskEvents
+      taskEvents: eventView.taskEvents,
+      health: eventView.health
     };
+    if (includeControllerSummary !== false) {
+      payload.controllerSummary = buildControllerSummary(payload);
+    }
+    return payload;
   }
-  const baseDir = path3.resolve(outputDir || path3.join(process.cwd(), ".subagent-runs"));
+  const baseDir = path6.resolve(outputDir || path6.join(process.cwd(), ".subagent-runs"));
+  await recoverRunsFromOutputDir(baseDir).catch(() => null);
   let entries = [];
   try {
-    entries = await fs4.readdir(baseDir, { withFileTypes: true });
+    entries = await fs6.readdir(baseDir, { withFileTypes: true });
   } catch {
     return { mode: "list", outputDir: baseDir, runs: [], active: listActiveProcesses() };
   }
-  const runDirs = entries.filter((entry) => entry.isDirectory()).map((entry) => path3.join(baseDir, entry.name)).sort().reverse().slice(0, limit);
+  const runDirs = entries.filter((entry) => entry.isDirectory()).map((entry) => path6.join(baseDir, entry.name)).sort().reverse().slice(0, limit);
   const runs = [];
   for (const dir of runDirs) {
     try {
-      runs.push(await readJson(path3.join(dir, "run-summary.json")));
+      runs.push(await readJson(path6.join(dir, "run-summary.json")));
     } catch {
       runs.push({ runDir: dir, status: "incomplete_or_unreadable" });
     }
@@ -32454,10 +34326,10 @@ async function loadRunStatus({ runDir, outputDir, limit = 20, recentEventsLimit 
     statusEvents: { runsWithEventLogs: countRunsWithEventLogs(runs) }
   };
 }
-async function readEventsFile(eventsPath) {
+async function readEventsFile2(eventsPath) {
   let text;
   try {
-    text = await fs4.readFile(eventsPath, "utf8");
+    text = await fs6.readFile(eventsPath, "utf8");
   } catch {
     return { exists: false, events: [] };
   }
@@ -32473,7 +34345,7 @@ async function readEventsFile(eventsPath) {
   }
   return { exists: true, events };
 }
-async function collectTaskEntries(summary, runDir) {
+async function collectTaskEntries2(summary, runDir) {
   const entries = [];
   if (summary && Array.isArray(summary.tasks)) {
     for (const task of summary.tasks) {
@@ -32482,83 +34354,26 @@ async function collectTaskEntries(summary, runDir) {
     }
   }
   if (entries.length === 0 && runDir) {
-    const tasksDir = path3.join(runDir, "tasks");
+    const tasksDir = path6.join(runDir, "tasks");
     let names = [];
     try {
-      names = await fs4.readdir(tasksDir, { withFileTypes: true });
+      names = await fs6.readdir(tasksDir, { withFileTypes: true });
     } catch {
       return entries;
     }
     for (const ent of names) {
       if (!ent.isDirectory()) continue;
-      entries.push({ id: ent.name, taskDir: path3.join(tasksDir, ent.name), eventLogPath: null });
+      entries.push({ id: ent.name, taskDir: path6.join(tasksDir, ent.name), eventLogPath: null });
     }
   }
   return entries;
 }
 function summarizeTaskEvents(events, eventLogPath) {
-  const orderedEvents = events.slice().sort((a, b) => compareTimestamp(eventTimestamp(a), eventTimestamp(b)));
-  const summary = {
-    eventLogPath,
-    eventCount: events.length,
-    lastEventAt: void 0,
-    lastHeartbeatAt: void 0,
-    phase: void 0,
-    blockedReason: void 0,
-    latestSummary: void 0
-  };
-  for (const event of orderedEvents) {
-    if (!event || typeof event !== "object") continue;
-    const { type } = event;
-    const timestamp = eventTimestamp(event);
-    if (timestamp) summary.lastEventAt = timestamp;
-    if (type === "heartbeat") {
-      summary.lastHeartbeatAt = timestamp || summary.lastHeartbeatAt;
-    }
-    if (type === "phase_started") {
-      summary.phase = event.phase || event.phaseName || event.message || summary.phase;
-    }
-    if (type === "blocked" || type === "block" || type === "stuck") {
-      summary.blockedReason = event.reason || event.message || summary.blockedReason;
-    }
-    if (type === "checkpoint" || type === "heartbeat" || type === "message" || type === "summary") {
-      const text = event.summary || event.message;
-      if (text) summary.latestSummary = text;
-    }
-  }
-  return summary;
+  const summary = summarizeEventList(events, eventLogPath);
+  return { ...summary, ...assessHeartbeat(summary) };
 }
-function trimEvent(event) {
-  if (!event || typeof event !== "object") return null;
-  const out = {};
-  for (const key of [
-    "type",
-    "timestamp",
-    "taskId",
-    "phase",
-    "message",
-    "summary",
-    "reason",
-    "label",
-    "command",
-    "status",
-    "exitCode",
-    "signal",
-    "timedOut",
-    "cancelled",
-    "durationMs",
-    "pid",
-    "title",
-    "kind",
-    "dryRun"
-  ]) {
-    if (event[key] !== void 0) out[key] = event[key];
-  }
-  if (out.timestamp === void 0 && event.ts !== void 0) out.timestamp = event.ts;
-  return out;
-}
-function eventTimestamp(event) {
-  return event?.timestamp || event?.ts;
+function trimEvent3(event) {
+  return trimEvent2(event);
 }
 function compareTimestamp(a, b) {
   if (a && b) return a < b ? -1 : a > b ? 1 : 0;
@@ -32569,7 +34384,7 @@ function compareTimestamp(a, b) {
 async function buildRunEventView(summary, runDir, options = {}) {
   const requestedLimit = Number(options.recentEventsLimit) || DEFAULT_RECENT_EVENTS_LIMIT;
   const recentLimit = Math.max(0, Math.min(1e3, requestedLimit));
-  const taskEntries = await collectTaskEntries(summary, runDir);
+  const taskEntries = await collectTaskEntries2(summary, runDir);
   const taskEvents = [];
   const allEvents = [];
   const tasksById = /* @__PURE__ */ new Map();
@@ -32579,10 +34394,17 @@ async function buildRunEventView(summary, runDir, options = {}) {
     }
   }
   for (const entry of taskEntries) {
-    const eventsPath = entry.eventLogPath || (entry.taskDir ? path3.join(entry.taskDir, "events.jsonl") : null);
+    const eventsPath = entry.eventLogPath || (entry.taskDir ? path6.join(entry.taskDir, "events.jsonl") : null);
     if (!eventsPath) continue;
-    const { events } = await readEventsFile(eventsPath);
-    const taskSummary = summarizeTaskEvents(events, eventsPath);
+    const { events } = await readEventsFile2(eventsPath);
+    const taskSummaryBase = summarizeTaskEvents(events, eventsPath);
+    const taskSummary = {
+      ...taskSummaryBase,
+      ...assessHeartbeat(taskSummaryBase, {
+        staleHeartbeatMs: options.staleHeartbeatMs,
+        slowEventMs: options.slowEventMs
+      })
+    };
     taskEvents.push({ taskId: entry.id, ...taskSummary });
     const taskResult = tasksById.get(entry.id);
     if (taskResult) {
@@ -32594,22 +34416,22 @@ async function buildRunEventView(summary, runDir, options = {}) {
     for (const event of events) allEvents.push(event);
   }
   const sorted = allEvents.slice().sort((a, b) => compareTimestamp(a?.timestamp || a?.ts, b?.timestamp || b?.ts));
-  const recentEvents = sorted.slice(-recentLimit).map(trimEvent).filter(Boolean);
-  return { recentEvents, taskEvents };
+  const recentEvents = sorted.slice(-recentLimit).map(trimEvent3).filter(Boolean);
+  return { recentEvents, taskEvents, health: summarizeRunHealth(taskEvents) };
 }
 async function readRunInputFallback(runDir) {
   try {
-    const input = await readJson(path3.join(runDir, "run-input.json"));
+    const input = await readJson(path6.join(runDir, "run-input.json"));
     return {
-      runId: path3.basename(runDir),
+      runId: path6.basename(runDir),
       runDir,
       tasks: (input.tasks || []).map((task) => ({
         id: task.id,
-        taskDir: path3.join(runDir, "tasks", task.id)
+        taskDir: path6.join(runDir, "tasks", task.id)
       }))
     };
   } catch {
-    return { runId: path3.basename(runDir), runDir, tasks: [] };
+    return { runId: path6.basename(runDir), runDir, tasks: [] };
   }
 }
 function countRunsWithEventLogs(runs) {
@@ -32618,6 +34440,79 @@ function countRunsWithEventLogs(runs) {
     if (run && Array.isArray(run.tasks) && run.tasks.some((task) => task && task.eventLogPath)) count++;
   }
   return count;
+}
+function summarizeRunHealth(taskEvents = [], active = []) {
+  const activeIds = new Set((active || []).map((record2) => record2?.taskId).filter(Boolean));
+  const stalledTasks = [];
+  const slowTasks = [];
+  const blockedTasks = [];
+  let needsController = false;
+  let latestHeartbeatAt;
+  let latestEventAt;
+  for (const task of taskEvents || []) {
+    if (!task) continue;
+    if (task.lastHeartbeatAt && (!latestHeartbeatAt || task.lastHeartbeatAt > latestHeartbeatAt)) {
+      latestHeartbeatAt = task.lastHeartbeatAt;
+    }
+    if (task.lastEventAt && (!latestEventAt || task.lastEventAt > latestEventAt)) {
+      latestEventAt = task.lastEventAt;
+    }
+    if (task.blockedReason) {
+      blockedTasks.push({ taskId: task.taskId, reason: task.blockedReason });
+      needsController = true;
+    }
+    if (task.needsController) needsController = true;
+    if (activeIds.size && task.taskId && !activeIds.has(task.taskId)) continue;
+    if (task.stalled) {
+      stalledTasks.push({ taskId: task.taskId, lastHeartbeatAt: task.lastHeartbeatAt, lastEventAt: task.lastEventAt });
+      needsController = true;
+    }
+    if (task.slow) {
+      slowTasks.push({ taskId: task.taskId, lastEventAt: task.lastEventAt });
+    }
+  }
+  return {
+    status: needsController ? "needs_controller" : stalledTasks.length ? "stalled" : slowTasks.length ? "slow" : "ok",
+    needsController,
+    stalledTasks,
+    slowTasks,
+    blockedTasks,
+    latestHeartbeatAt,
+    latestEventAt
+  };
+}
+function suggestControllerAction(payload, health = {}) {
+  if (payload.done) return "collect_complete";
+  if (health.needsController || health.stalledTasks?.length) return "inspect_or_cancel_stalled_tasks";
+  if (health.slowTasks?.length) return "continue_monitoring";
+  if (payload.active?.length) return "continue_waiting";
+  return "inspect_run_state";
+}
+function compactWatchPayload(payload, input = {}) {
+  return {
+    done: payload.done,
+    runId: payload.runId,
+    runDir: payload.runDir,
+    status: payload.status,
+    active: payload.active,
+    health: payload.health,
+    controllerSummary: input.includeControllerSummary === false ? void 0 : payload.controllerSummary,
+    suggestedAction: payload.suggestedAction,
+    recentEvents: input.recentEventsLimit ? payload.recentEvents : void 0,
+    taskEvents: input.includeTaskEvents ? payload.taskEvents : void 0
+  };
+}
+function attachOwnershipValidation(summary, tasks, results, workspace) {
+  try {
+    const ownership = validateRunFileOwnership({ tasks, results, workspace });
+    if (ownership?.violations?.length) summary.ownershipViolations = ownership.violations;
+    if (ownership?.warnings?.length) summary.ownershipWarnings = ownership.warnings;
+  } catch (error51) {
+    summary.ownershipWarnings = [
+      ...summary.ownershipWarnings || [],
+      { warning: "ownership validation failed", detail: error51?.message || String(error51) }
+    ];
+  }
 }
 async function cancelRun(runId) {
   const cancellation = activeRuns.get(runId);
@@ -32637,7 +34532,7 @@ function normalizeTask(task, defaults, workspace, planDir) {
     throw new Error(`Task ${task.id} must include title and prompt`);
   }
   const merged = { ...defaults, ...task };
-  const addDirs = unique([workspace, ...defaults.addDirs || [], ...task.addDirs || []]).map((dir) => path3.resolve(planDir, dir));
+  const addDirs = unique([workspace, ...defaults.addDirs || [], ...task.addDirs || []]).map((dir) => path6.resolve(planDir, dir));
   const timeoutMs = Number(merged.timeoutMs || 6e5);
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1e3) {
     throw new Error(`Task ${task.id} has invalid timeoutMs: ${merged.timeoutMs} (must be an integer >= 1000)`);
@@ -32738,7 +34633,7 @@ async function runTasks(tasks, scheduler) {
   return results.sort((a, b) => tasks.findIndex((task) => task.id === a.id) - tasks.findIndex((task) => task.id === b.id));
 }
 async function writeSkippedTask(task, scheduler, failedDep) {
-  const taskDir = path3.join(scheduler.runDir, "tasks", task.id);
+  const taskDir = path6.join(scheduler.runDir, "tasks", task.id);
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const result = {
     id: task.id,
@@ -32749,11 +34644,11 @@ async function writeSkippedTask(task, scheduler, failedDep) {
     taskDir,
     reason: `Dependency ${failedDep.id} ended with status ${failedDep.status}`
   };
-  await writeJson(path3.join(taskDir, "result.json"), result);
+  await writeJson(path6.join(taskDir, "result.json"), result);
   return result;
 }
 async function writeCancelledTask(task, scheduler) {
-  const taskDir = path3.join(scheduler.runDir, "tasks", task.id);
+  const taskDir = path6.join(scheduler.runDir, "tasks", task.id);
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const result = {
     id: task.id,
@@ -32764,11 +34659,11 @@ async function writeCancelledTask(task, scheduler) {
     taskDir,
     reason: "Run cancelled before this task started"
   };
-  await writeJson(path3.join(taskDir, "result.json"), result);
+  await writeJson(path6.join(taskDir, "result.json"), result);
   return result;
 }
 async function writeFailedTask(task, scheduler, error51) {
-  const taskDir = path3.join(scheduler.runDir, "tasks", task.id);
+  const taskDir = path6.join(scheduler.runDir, "tasks", task.id);
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const result = {
     id: task.id,
@@ -32779,7 +34674,7 @@ async function writeFailedTask(task, scheduler, error51) {
     taskDir,
     error: error51?.stack || String(error51)
   };
-  await writeJson(path3.join(taskDir, "result.json"), result);
+  await writeJson(path6.join(taskDir, "result.json"), result);
   return result;
 }
 function summarizeRun(scheduler, tasks, results) {
@@ -32823,7 +34718,7 @@ function firstNonEmptyArray(...values) {
 // src/server.mjs
 var server = new McpServer({
   name: "subagent-control-protocol",
-  version: "0.3.3",
+  version: "0.3.4",
   instructions: [
     "Use this MCP server when Codex should act as the controller and delegate bounded work to Claude Code CLI subagents.",
     "Codex is the controller: it owns decomposition, dependency analysis, parallelism, and review; this MCP server is only the execution layer and never decides decomposition or parallelism on its own.",
@@ -32834,7 +34729,9 @@ var server = new McpServer({
     "Always inspect structuredContent.runSummary before treating delegated work as complete.",
     "Run directories contain controller-readable prompts, raw outputs, normalized task results, run-summary.json, and may include an events.jsonl append-only log of lifecycle/heartbeat events emitted by the runner.",
     "Prefer subagent_status for structured run status and event summaries (including heartbeats) rather than reading raw stdout/stderr files by default; subagent_status accepts recentEventsLimit to bound the number of recent event entries returned.",
-    "For long-running plans, use subagent_start to launch a dependency-aware plan in the background and return immediately with start info (runId/runDir), then use subagent_collect to fetch the final run summary or interim progress; subagent_start/subagent_collect are the async counterpart to the blocking subagent_run_many."
+    "For long-running plans, use subagent_start to launch a dependency-aware plan in the background and return immediately with start info (runId/runDir), then use subagent_collect to fetch the final run summary or interim progress; subagent_start/subagent_collect are the async counterpart to the blocking subagent_run_many.",
+    "Use subagent_watch for controller-friendly health checks over running plans, including stalled/slow heartbeat detection and suggested controller actions.",
+    "Use subagent_cleanup to safely plan or execute retention cleanup for run artifact directories; dryRun defaults to true."
   ].join(" ")
 });
 var permissionMode = external_exports.enum([
@@ -32937,7 +34834,9 @@ var runSummaryShape = {
   skippedTasks: external_exports.number().int(),
   cancelledTasks: external_exports.number().int(),
   timedOutTasks: external_exports.number().int(),
-  tasks: external_exports.array(external_exports.object(taskResultShape))
+  tasks: external_exports.array(external_exports.object(taskResultShape)),
+  ownershipViolations: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional(),
+  ownershipWarnings: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional()
 };
 var runOutputShape = {
   ok: external_exports.boolean(),
@@ -32959,6 +34858,8 @@ var statusOutputShape = {
   summary: external_exports.record(external_exports.string(), external_exports.any()).optional().describe('Present when mode is "single"; may be a full run-summary.json or a minimal in-progress summary before run-summary.json exists.'),
   recentEvents: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe("Bounded, trimmed recent events from task events.jsonl files in single-run mode."),
   taskEvents: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe("Per-task compact event summaries in single-run mode."),
+  health: external_exports.record(external_exports.string(), external_exports.any()).optional().describe("Run health summary derived from events/heartbeats."),
+  controllerSummary: external_exports.record(external_exports.string(), external_exports.any()).optional().describe("Compact controller-facing summary for decision making."),
   statusEvents: external_exports.record(external_exports.string(), external_exports.any()).optional().describe("Compact event metadata in list mode."),
   outputDir: external_exports.string().optional().describe('Present when mode is "list".'),
   runs: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe('Present when mode is "list"; entries are run summaries or { runDir, status: "incomplete_or_unreadable" }.'),
@@ -32998,6 +34899,26 @@ var collectOutputShape = {
   recentEvents: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe("Bounded recent event window from task events.jsonl files, when requested."),
   taskEvents: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe("Per-task compact event summaries for in-progress runs."),
   active: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional().describe("Active Claude child processes for this run, when known."),
+  health: external_exports.record(external_exports.string(), external_exports.any()).optional().describe("Run health summary derived from events/heartbeats."),
+  controllerSummary: external_exports.record(external_exports.string(), external_exports.any()).optional().describe("Compact controller-facing summary for decision making."),
+  error: external_exports.object(errorDetailShape).optional()
+};
+var watchOutputShape = {
+  ...collectOutputShape,
+  suggestedAction: external_exports.string().optional().describe("Controller action hint based on current run health.")
+};
+var cleanupOutputShape = {
+  ok: external_exports.boolean(),
+  outputDir: external_exports.string().optional(),
+  dryRun: external_exports.boolean().optional(),
+  options: external_exports.record(external_exports.string(), external_exports.any()).optional(),
+  plan: external_exports.record(external_exports.string(), external_exports.any()).optional(),
+  runs: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional(),
+  summary: external_exports.record(external_exports.string(), external_exports.any()).optional(),
+  deletedRuns: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional(),
+  keptRuns: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional(),
+  reclaimedBytes: external_exports.number().optional(),
+  errors: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional(),
   error: external_exports.object(errorDetailShape).optional()
 };
 server.registerTool(
@@ -33098,7 +35019,10 @@ server.registerTool(
       runDir: external_exports.string().optional().describe("Run directory to collect. Used directly, or to resolve a runId."),
       workspace: external_exports.string().optional().describe("Workspace used to resolve the default outputDir when runDir and outputDir are not supplied. Defaults to the MCP server working directory."),
       outputDir: external_exports.string().optional().describe("Output directory to resolve a runId when runDir is not supplied. Defaults to <workspace>/.subagent-runs."),
-      recentEventsLimit: external_exports.number().int().positive().max(1e3).optional().describe("Maximum number of recent event entries (from events.jsonl) to return. Omitted means no recent-events window is requested.")
+      recentEventsLimit: external_exports.number().int().positive().max(1e3).optional().describe("Maximum number of recent event entries (from events.jsonl) to return. Omitted means no recent-events window is requested."),
+      staleHeartbeatMs: external_exports.number().int().positive().optional().describe("Heartbeat age threshold for stalled detection."),
+      slowEventMs: external_exports.number().int().positive().optional().describe("Event age threshold for slow detection."),
+      includeControllerSummary: external_exports.boolean().optional().describe("Set false to omit controllerSummary from polling responses.")
     },
     outputSchema: collectOutputShape
   },
@@ -33112,6 +35036,65 @@ server.registerTool(
   }
 );
 server.registerTool(
+  "subagent_watch",
+  {
+    title: "Watch Subagent Run Health",
+    description: "Read controller-friendly health for a subagent run without starting new work. Accepts runId and/or runDir plus outputDir/workspace and returns collect/status data, heartbeat-derived health, a compact controllerSummary, and a suggestedAction such as continue_waiting or inspect_or_cancel_stalled_tasks.",
+    inputSchema: {
+      runId: external_exports.string().optional().describe("Run id to watch. When omitted, runDir is used."),
+      runDir: external_exports.string().optional().describe("Run directory to watch."),
+      workspace: external_exports.string().optional().describe("Workspace used to resolve default outputDir when needed."),
+      outputDir: external_exports.string().optional().describe("Output directory to resolve runId when runDir is not supplied."),
+      recentEventsLimit: external_exports.number().int().positive().max(1e3).optional(),
+      staleHeartbeatMs: external_exports.number().int().positive().optional().describe("Heartbeat age threshold for stalled detection."),
+      slowEventMs: external_exports.number().int().positive().optional().describe("Event age threshold for slow detection."),
+      compact: external_exports.boolean().optional().describe("Return a compact health payload instead of the full collect-shaped response."),
+      healthOnly: external_exports.boolean().optional().describe("Alias for compact."),
+      includeControllerSummary: external_exports.boolean().optional().describe("Set false to omit controllerSummary from the watch payload."),
+      includeTaskEvents: external_exports.boolean().optional().describe("When compact is true, include per-task event summaries. Defaults to false.")
+    },
+    outputSchema: watchOutputShape
+  },
+  async (input) => {
+    try {
+      return jsonToolResult(await watchRun(input));
+    } catch (error51) {
+      return errorToolResult(error51, "watch_failed");
+    }
+  }
+);
+server.registerTool(
+  "subagent_cleanup",
+  {
+    title: "Clean Up Subagent Run Artifacts",
+    description: "Plan or execute safe retention cleanup for subagent run artifact directories. dryRun defaults to true. Deletion is restricted to direct child run directories under outputDir.",
+    inputSchema: {
+      workspace: external_exports.string().optional().describe("Workspace used to resolve default outputDir when outputDir is omitted."),
+      outputDir: external_exports.string().optional().describe("Run artifact output directory. Defaults to <workspace>/.subagent-runs."),
+      dryRun: external_exports.boolean().optional().describe("When true, only report what would be deleted. Defaults to true."),
+      maxAgeDays: external_exports.number().nonnegative().optional(),
+      maxRuns: external_exports.number().int().nonnegative().optional(),
+      maxBytes: external_exports.number().int().nonnegative().optional(),
+      keepFailed: external_exports.boolean().optional().describe("Keep failed runs even when retention rules match. Defaults to true."),
+      includeIncomplete: external_exports.boolean().optional().describe("Allow incomplete/in-progress-looking runs to be deleted. Defaults to false.")
+    },
+    outputSchema: cleanupOutputShape
+  },
+  async (input) => {
+    try {
+      const outputDir = input.outputDir || `${input.workspace || process.cwd()}/.subagent-runs`;
+      const options = { ...input, outputDir };
+      if (input.dryRun === false) {
+        return jsonToolResult(await executeCleanup(options));
+      }
+      const plan = await planCleanup({ ...options, dryRun: true });
+      return jsonToolResult({ ...plan, plan });
+    } catch (error51) {
+      return errorToolResult(error51, "cleanup_failed");
+    }
+  }
+);
+server.registerTool(
   "subagent_status",
   {
     title: "Read Subagent Run Status",
@@ -33120,7 +35103,10 @@ server.registerTool(
       runDir: external_exports.string().optional(),
       outputDir: external_exports.string().optional(),
       limit: external_exports.number().int().positive().max(100).optional(),
-      recentEventsLimit: external_exports.number().int().positive().max(1e3).optional().describe("Maximum number of recent event entries (from events.jsonl) to summarize in single mode. Safe maximum is 1000; omitted means no event summaries are requested beyond defaults.")
+      recentEventsLimit: external_exports.number().int().positive().max(1e3).optional().describe("Maximum number of recent event entries (from events.jsonl) to summarize in single mode. Safe maximum is 1000; omitted means no event summaries are requested beyond defaults."),
+      staleHeartbeatMs: external_exports.number().int().positive().optional().describe("Heartbeat age threshold for stalled detection."),
+      slowEventMs: external_exports.number().int().positive().optional().describe("Event age threshold for slow detection."),
+      includeControllerSummary: external_exports.boolean().optional().describe("Set false to omit controllerSummary from status responses.")
     },
     outputSchema: statusOutputShape
   },

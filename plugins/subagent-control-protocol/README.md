@@ -39,7 +39,7 @@ Run artifacts  (.subagent-runs/<ts>/...)
 - **Codex controller** — decomposes work, dispatches tasks, reads results, integrates and ships.
 - **SCP Codex plugin** — the installable product: marketplace metadata, plugin manifest, Skill, MCP registration, bundled runtime, and update bootstrap.
 - **Skill workflow layer** — governs *when* and *how* to delegate: read-only review, non-overlapping implementation, verification, single-vs-many delegation.
-- **MCP runtime/tool layer** — the plugin's execution layer. It manages Claude child processes, bounded concurrency, timeouts, cancellation, and structured output. Exposes six tools: blocking run, async start/collect, status, and cancel.
+- **MCP runtime/tool layer** — the plugin's execution layer. It manages Claude child processes, bounded concurrency, timeouts, cancellation, heartbeat health, artifact cleanup, and structured output. Exposes eight tools: blocking run, async start/collect, status/watch, cleanup, and cancel.
 - **Claude Code CLI executor** — runs each bounded task and returns JSON matching the result contract.
 
 分层关系：Codex 总控负责拆分与集成；SCP 作为 Codex 插件被安装；插件里的 Skill 层定义何时/如何委派；插件里的 MCP runtime 负责进程、并发、超时与结构化输出；Claude Code CLI 作为执行者运行局部任务并返回符合结果契约的 JSON。
@@ -60,7 +60,8 @@ Either way the installed plugin gives Codex:
 
 - the **execution tool runtime**, so Codex can call `subagent_run_task`,
   `subagent_run_many`, `subagent_start`, `subagent_collect`,
-  `subagent_status`, and `subagent_cancel`;
+  `subagent_status`, `subagent_watch`, `subagent_cleanup`, and
+  `subagent_cancel`;
 - the **orchestrator Skill**, so Codex knows when to create a `todoList`, when
   work can run in parallel, and when to add the two read-only review agents.
 
@@ -326,7 +327,9 @@ The plugin exposes both **blocking run tools** and a **non-blocking async pair**
 - **Blocking execution.** `subagent_run_task` and `subagent_run_many` start Claude work and wait for the final `{ runSummary, results }`.
 - **Async start.** `subagent_start` accepts the same dependency-aware plan shape as `subagent_run_many`, starts the run in the background, and returns immediately with `runId`, `runDir`, `outputDir`, `workspace`, `status`, `startedAt`, `totalTasks`, `concurrency`, and `dryRun`. Keep `runDir` or `outputDir` with `runId`; that is the most reliable later collect handle.
 - **Progress polling.** `subagent_status` reads the run directory while work is in flight and returns active processes, compact `taskEvents`, latest heartbeat/phase timestamps, and a bounded `recentEvents` window.
+- **Health watch.** `subagent_watch` wraps collect/status data into controller-friendly `health`, `controllerSummary`, and `suggestedAction` fields so Codex can monitor heartbeats without reading logs. Pass `compact: true` when polling frequently to avoid echoing the full run summary/results payload.
 - **Async collect.** `subagent_collect` accepts `runId` and/or `runDir` (plus optional `workspace`/`outputDir`) and returns `{ done, status, summary }`. When `done` is `false`, the payload is progress-shaped; when `done` is `true`, `summary` and `runSummary` are the final `run-summary.json`, with per-task results also available as `results` and `summary.tasks`.
+- **Retention cleanup.** `subagent_cleanup` plans or executes safe cleanup of `.subagent-runs` artifact directories. `dryRun` defaults to `true`, and deletion is restricted to direct child run directories under the selected `outputDir`. Retention can be controlled with `maxAgeDays`, `maxRuns`, or `maxBytes`; failed runs are kept by default (`keepFailed: true`) and incomplete-looking runs are protected by default (`includeIncomplete: false`).
 
 You do not start a raw server process or manage MCP plumbing yourself. The Codex plugin bundles its MCP runtime; in normal plugin use, Codex just calls these tools.
 
@@ -334,7 +337,7 @@ Concise controller pattern:
 
 1. **Decompose** the task into a `todoList` of concrete, bounded steps with explicit, non-overlapping file ownership.
 2. **Start parallel eligible tasks** with `subagent_start` for long-running work, or `subagent_run_many` when the controller wants to block until completion. Use `dependsOn` for ordered steps.
-3. **Poll status/events** with `subagent_status` instead of scanning `stdout.txt`/`stderr.txt`.
+3. **Poll status/events** with `subagent_status`, or use `subagent_watch` when the controller needs heartbeat-derived health and a suggested action. Use `includeControllerSummary: false` or `compact: true` for high-frequency polling. Do not scan `stdout.txt`/`stderr.txt` by default.
 4. **Collect the final summary** with `subagent_collect`; cross-check `filesChanged` for collisions and route any fix to the single owning agent.
 5. **Run two read-only reviews** after implementation: one software-engineering review and one real-user-perspective review. Codex integrates their findings and makes the final accept/hold/ship decision.
 
@@ -386,6 +389,8 @@ Most users should stop at the minimal prompts above. The examples below are opti
 | `subagent_start` | Start a dependency-aware plan in the background and return immediately with `runId`/`runDir`; use for long-running async orchestration. |
 | `subagent_collect` | Collect interim progress or the final `run-summary.json` for a run started by `subagent_start`; returns `{ done, status, summary }`. |
 | `subagent_status` | Read one `run-summary.json` (mode `single`) or list recent runs from an output dir (mode `list`); both include the active-process list. In single mode it also surfaces event-aware fields when present — latest heartbeat/phase, a per-task `taskEvents` summary, and a bounded `recentEvents` window (pass `recentEventsLimit` to cap it). Prefer this over reading raw `stdout.txt`/`stderr.txt`. |
+| `subagent_watch` | Read controller-friendly run health without starting new work. Returns collect/status data plus `health`, `controllerSummary`, and `suggestedAction` for stalled/slow heartbeat handling. Use `compact: true` for cheap polling. |
+| `subagent_cleanup` | Plan or execute retention cleanup for run artifact directories. Defaults to dry-run mode; only direct child run directories under `outputDir` are eligible for deletion. Supports `maxAgeDays`, `maxRuns`, `maxBytes`, `keepFailed`, and `includeIncomplete`. |
 | `subagent_cancel` | Best-effort cancellation for active Claude child processes in this server process. Requires `runId`. |
 
 Every tool returns a shared envelope: `{ ok: true, ...payload }` on success, or `{ ok: false, error: { code, message, stack? } }` (with `isError: true`) on failure. Blocking run tools include `runSummary` in `structuredContent`; async start returns a run locator, and async collect returns progress or the final summary.
@@ -404,7 +409,7 @@ Every Claude subagent is asked to return JSON matching `schemas/agent-result.sch
 - `tokenUsageSummary` — **required, always.** A Claude-authored note on whether exact token usage was visible; never fabricate exact counts.
 - `metrics` — optional token/cost numbers when visible.
 
-The runner normalizes common variants (`files_changed`, `verifications`, `status: "passed"`) into the official shape. The controller also records measured usage from the Claude CLI envelope as `usage` and `measuredUsageSummary` when available — prefer these over the subagent's self-report for actual token/cost.
+The runner normalizes common variants (`files_changed`, `verifications`, `status: "passed"`) into the official shape, and repairs common Claude output envelopes such as fenced JSON blocks, prose-wrapped JSON, and `{ type: "result", result: "..." }`. The controller also records measured usage from the Claude CLI envelope as `usage` and `measuredUsageSummary` when available — prefer these over the subagent's self-report for actual token/cost.
 
 Prefer MCP-measured numbers over the subagent's self-report: use `measuredUsageSummary`/`usage` as the source of truth, and `tokenUsageSummary` only as qualitative context.
 
@@ -430,7 +435,7 @@ Each run writes a timestamped directory:
         events.jsonl
 ```
 
-`tasks/<id>/events.jsonl` is an append-only log of structured lifecycle events emitted by the runner — task start/exit, `phase_started`, periodic `heartbeat`, `checkpoint`, `blocked`, and `command_started`/`command_finished`. It is a structured event stream, **not** a capture of the subagent's full `stdout`/`stderr`. Read it (or, better, ask `subagent_status` for the derived `taskEvents`/`recentEvents` summary) to track live progress, latest phase, and recent heartbeats without touching process logs.
+`tasks/<id>/events.jsonl` is an append-only log of structured lifecycle events. The runtime writes task/process start/exit events and a periodic runtime `heartbeat` while the Claude process is active; the Claude subprocess is also asked to emit `phase_started`, `checkpoint`, `blocked`, and `command_started`/`command_finished`. It is a structured event stream, **not** a capture of the subagent's full `stdout`/`stderr`. Read it (or, better, ask `subagent_status` for the derived `taskEvents`/`recentEvents` summary) to track live progress, latest phase, and recent heartbeats without touching process logs.
 
 Event entries are compact JSON objects. Common fields are:
 
@@ -441,16 +446,20 @@ Event entries are compact JSON objects. Common fields are:
 - `phase` — current phase for `phase_started`.
 - `label` / `command` — short command label for command events; do not include full command output.
 - `status` / `exitCode` / `durationMs` — small terminal or command outcome fields when relevant.
+- `sequence` — monotonic heartbeat sequence number when runtime or subagent emits periodic heartbeats.
+- `progress` / `etaSeconds` — compact progress hints when available.
+- `severity` / `needsController` — escalation hints for blocked or unusual states.
 
-The event log is best-effort observability. Both the runtime and the Claude subprocess may append to it, so malformed or interleaved lines are ignored by `subagent_status`; full stdout/stderr remain artifact-only.
+The event log is best-effort observability. Both the runtime and the Claude subprocess may append to it, so malformed or interleaved lines are ignored by `subagent_status`; full stdout/stderr remain artifact-only. `subagent_watch` turns the same event data into a compact health view for controller monitoring.
 
 Read order for controllers:
 
 1. `run-summary.json` — overall run status.
 2. `tasks/<id>/result.json` — one normalized task result.
 3. `tasks/<id>/events.jsonl` (or `subagent_status`) — latest heartbeat/phase and recent events for progress tracking.
-4. `tasks/<id>/raw-output.json` — only when debugging Claude's original envelope.
-5. `stdout.txt` / `stderr.txt` — artifact-only, for process-level diagnosis. Do not read these by default; prefer `subagent_status` and `events.jsonl` for observability.
+4. `subagent_watch` — controller health, stalled/slow task hints, and suggested next action for long-running async work.
+5. `tasks/<id>/raw-output.json` — only when debugging Claude's original envelope.
+6. `stdout.txt` / `stderr.txt` — artifact-only, for process-level diagnosis. Do not read these by default; prefer `subagent_status`, `subagent_watch`, and `events.jsonl` for observability.
 
 ## Safety Notes
 
@@ -460,6 +469,8 @@ Read order for controllers:
 - Keep implementation single-writer with explicit, non-overlapping file ownership; never let two subagents edit the same file concurrently.
 - Use `dryRun: true` to validate task decomposition or MCP wiring before a real run.
 - Treat `permissionMode: "bypassPermissions"` and `"auto"` as privileged modes; prefer isolated workspaces for delegated tasks and never use them on shared trees.
+- Use `subagent_cleanup` in dry-run mode first when pruning run artifacts; execute cleanup only after checking the returned plan.
+- When reclaiming space, remember that `keepFailed` defaults to `true` and `includeIncomplete` defaults to `false`; these defaults protect diagnostic runs and in-progress-looking runs.
 - Never delegate merge, release, or push decisions to a subagent — Codex stays the final integrator.
 
 ## Development Checks

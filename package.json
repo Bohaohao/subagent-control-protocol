@@ -1,6 +1,6 @@
 {
   "name": "subagent-control-protocol",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "type": "module",
   "description": "Codex plugin for orchestrating Claude Code subagents with a bundled MCP runtime and structured execution results.",
@@ -49,7 +49,7 @@
     "build:check": "node --check ./dist/server.mjs && node --check ./dist/bootstrap.mjs && node -e \"JSON.parse(require('fs').readFileSync('./dist/latest.json','utf8'))\"",
     "verify:bundle": "node scripts/verify-bundle-runtime.mjs",
     "verify:marketplace": "node scripts/verify-marketplace-plugin.mjs",
-    "check": "node --check ./build.mjs && node --check ./bin/subagent-control-protocol.mjs && node --check ./src/server.mjs && node --check ./src/bootstrap.mjs && node --check ./src/core/claude-runner.mjs && node --check ./src/core/json.mjs && node --check ./src/core/scheduler.mjs && node --check ./src/core/result-normalizer.mjs && node --check ./src/core/process-tree.mjs && node --check ./scripts/run-claude-agents.mjs && node --check ./scripts/smoke-mcp.mjs && node --check ./scripts/check-text-health.mjs && node --check ./scripts/verify-bundle-runtime.mjs && node --check ./scripts/verify-marketplace-plugin.mjs"
+    "check": "node --check ./build.mjs && node --check ./bin/subagent-control-protocol.mjs && node --check ./src/server.mjs && node --check ./src/bootstrap.mjs && node --check ./src/core/claude-runner.mjs && node --check ./src/core/json.mjs && node --check ./src/core/scheduler.mjs && node --check ./src/core/result-normalizer.mjs && node --check ./src/core/result-repair.mjs && node --check ./src/core/event-protocol.mjs && node --check ./src/core/cleanup.mjs && node --check ./src/core/ownership.mjs && node --check ./src/core/run-registry.mjs && node --check ./src/core/controller-summary.mjs && node --check ./src/core/process-tree.mjs && node --check ./scripts/run-claude-agents.mjs && node --check ./scripts/smoke-mcp.mjs && node --check ./scripts/check-text-health.mjs && node --check ./scripts/verify-bundle-runtime.mjs && node --check ./scripts/verify-marketplace-plugin.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

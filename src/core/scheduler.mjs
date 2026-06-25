@@ -2,7 +2,16 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { cancelActiveRun, listActiveProcesses, resolveClaudeExecutable, runClaudeTask } from './claude-runner.mjs'
+import { buildControllerSummary } from './controller-summary.mjs'
+import { assessHeartbeat, summarizeEventList, trimEvent as trimProtocolEvent } from './event-protocol.mjs'
 import { createRunId, readJson, writeJson } from './json.mjs'
+import { validateRunFileOwnership } from './ownership.mjs'
+import {
+  markRunRegistryEntry,
+  recoverRunsFromOutputDir,
+  resolveRunDirFromRegistry,
+  writeRunRegistryEntry,
+} from './run-registry.mjs'
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const resultSchemaPath = path.join(packageRoot, 'schemas', 'agent-result.schema.json')
@@ -25,7 +34,7 @@ export async function runTaskPlan(plan, options = {}) {
 }
 
 // Validate and prepare the same plan shape runTaskPlan uses, write
-// run-input.json, and build the in-memory scheduler context — without starting
+// run-input.json, and build the in-memory scheduler context - without starting
 // execution. Shared by the synchronous runTaskPlan and the asynchronous
 // startTaskPlan so both enforce identical plan validation and artifact layout.
 async function prepareRun(plan, options = {}) {
@@ -76,6 +85,15 @@ async function prepareRun(plan, options = {}) {
       timeoutMs: task.timeoutMs,
     })),
   })
+  await writeRunRegistryEntry(outputDir, {
+    runId,
+    runDir,
+    outputDir,
+    workspace,
+    startedAt,
+    status: 'active',
+    taskCount: tasks.length,
+  }).catch(() => {})
 
   const cancellation = {
     cancelled: false,
@@ -114,7 +132,12 @@ async function executeRun(scheduler, tasks) {
   const results = await runTasks(tasks, scheduler)
   const endedAt = new Date().toISOString()
   const summary = summarizeRun({ ...scheduler, endedAt }, tasks, results)
+  attachOwnershipValidation(summary, tasks, results, scheduler.workspace)
   await writeJson(path.join(scheduler.runDir, 'run-summary.json'), summary)
+  await markRunRegistryEntry(scheduler.outputDir, scheduler.runId, deriveRunStatus(summary), {
+    runDir: scheduler.runDir,
+    endedAt,
+  }).catch(() => {})
   return summary
 }
 
@@ -190,6 +213,9 @@ export async function collectRun(input = {}) {
     if (record?.runDir) runDir = record.runDir
   }
   if (!runDir && runId && input.outputDir) {
+    runDir = await resolveRunDirFromRegistry(path.resolve(input.outputDir), runId).catch(() => null)
+  }
+  if (!runDir && runId && input.outputDir) {
     const candidateRunDir = path.join(path.resolve(input.outputDir), runId)
     try {
       await fs.access(candidateRunDir)
@@ -203,10 +229,16 @@ export async function collectRun(input = {}) {
       || path.join(path.resolve(input.workspace || process.cwd()), '.subagent-runs')
     const defaultRunDir = path.join(path.resolve(defaultOutputDir), runId)
     try {
+      runDir = await resolveRunDirFromRegistry(path.resolve(defaultOutputDir), runId).catch(() => null)
+      if (runDir) throw new Error('__resolved_from_registry__')
       await fs.access(defaultRunDir)
       runDir = defaultRunDir
-    } catch {
+    } catch (error) {
+      if (error?.message === '__resolved_from_registry__') {
+        // runDir already resolved from the persisted registry.
+      } else {
       runDir = null
+      }
     }
   }
   if (!runDir) {
@@ -226,8 +258,10 @@ export async function collectRun(input = {}) {
   if (summary) {
     const eventView = await buildRunEventView(summary, runDir, {
       recentEventsLimit: input.recentEventsLimit,
+      staleHeartbeatMs: input.staleHeartbeatMs,
+      slowEventMs: input.slowEventMs,
     })
-    return {
+    const payload = {
       done: true,
       runId: summary.runId || resolvedRunId,
       runDir,
@@ -238,12 +272,23 @@ export async function collectRun(input = {}) {
       active: listActiveProcesses(summary.runId || resolvedRunId),
       recentEvents: eventView.recentEvents,
       taskEvents: eventView.taskEvents,
+      health: eventView.health,
     }
+    if (input.includeControllerSummary !== false) {
+      payload.controllerSummary = buildControllerSummary(payload)
+    }
+    return payload
   }
 
   // Still running: surface the same progress/event state subagent_status uses.
-  const progress = await loadRunStatus({ runDir, recentEventsLimit: input.recentEventsLimit })
-  return {
+  const progress = await loadRunStatus({
+    runDir,
+    recentEventsLimit: input.recentEventsLimit,
+    staleHeartbeatMs: input.staleHeartbeatMs,
+    slowEventMs: input.slowEventMs,
+    includeControllerSummary: input.includeControllerSummary,
+  })
+  const payload = {
     done: false,
     runId: resolvedRunId,
     runDir,
@@ -253,7 +298,27 @@ export async function collectRun(input = {}) {
     active: progress.active,
     recentEvents: progress.recentEvents,
     taskEvents: progress.taskEvents,
+    health: progress.health,
+    controllerSummary: progress.controllerSummary,
   }
+  return payload
+}
+
+export async function watchRun(input = {}) {
+  const collected = await collectRun(input)
+  const health = collected.health || summarizeRunHealth(collected.taskEvents || [], collected.active || [])
+  const suggestedAction = suggestControllerAction(collected, health)
+  const payload = {
+    ...collected,
+    health,
+    suggestedAction,
+  }
+  if (input.includeControllerSummary !== false) {
+    payload.controllerSummary = collected.controllerSummary || buildControllerSummary(collected)
+  }
+  return input.compact || input.healthOnly
+    ? compactWatchPayload(payload, input)
+    : payload
 }
 
 function retainRunHandle(record) {
@@ -338,7 +403,12 @@ async function writeFailureSummary(scheduler, tasks, error) {
   summary.status = 'failed'
   summary.error = error?.stack || String(error)
   summary.endedAt = endedAt
+  attachOwnershipValidation(summary, tasks, results, scheduler.workspace)
   await writeJson(path.join(scheduler.runDir, 'run-summary.json'), summary)
+  await markRunRegistryEntry(scheduler.outputDir, scheduler.runId, 'failed', {
+    runDir: scheduler.runDir,
+    endedAt,
+  }).catch(() => {})
   return summary
 }
 
@@ -370,7 +440,7 @@ async function collectPersistedTaskResults(runDir, tasks, scheduler) {
 // dumping entire event logs.
 const DEFAULT_RECENT_EVENTS_LIMIT = 20
 
-export async function loadRunStatus({ runDir, outputDir, limit = 20, recentEventsLimit } = {}) {
+export async function loadRunStatus({ runDir, outputDir, limit = 20, recentEventsLimit, staleHeartbeatMs, slowEventMs, includeControllerSummary } = {}) {
   if (runDir) {
     const resolved = path.resolve(runDir)
     const summaryPath = path.join(resolved, 'run-summary.json')
@@ -385,17 +455,27 @@ export async function loadRunStatus({ runDir, outputDir, limit = 20, recentEvent
     }
     // Report only this run's active processes, not every run the server knows about.
     const runId = summary?.runId || path.basename(resolved)
-    const eventView = await buildRunEventView(summary, resolved, { recentEventsLimit })
-    return {
+    const eventView = await buildRunEventView(summary, resolved, {
+      recentEventsLimit,
+      staleHeartbeatMs,
+      slowEventMs,
+    })
+    const payload = {
       mode: 'single',
       summary,
       active: listActiveProcesses(runId),
       recentEvents: eventView.recentEvents,
       taskEvents: eventView.taskEvents,
+      health: eventView.health,
     }
+    if (includeControllerSummary !== false) {
+      payload.controllerSummary = buildControllerSummary(payload)
+    }
+    return payload
   }
 
   const baseDir = path.resolve(outputDir || path.join(process.cwd(), '.subagent-runs'))
+  await recoverRunsFromOutputDir(baseDir).catch(() => null)
   let entries = []
   try {
     entries = await fs.readdir(baseDir, { withFileTypes: true })
@@ -448,7 +528,7 @@ async function readEventsFile(eventsPath) {
       const event = JSON.parse(trimmed)
       if (event && typeof event === 'object' && !Array.isArray(event)) events.push(event)
     } catch {
-      // Malformed line — skip it rather than failing the whole status read.
+      // Malformed line - skip it rather than failing the whole status read.
     }
   }
   return { exists: true, events }
@@ -485,70 +565,14 @@ async function collectTaskEntries(summary, runDir) {
 // Reduce a task's raw event list to a compact summary. Events are assumed
 // append-ordered (chronological), so "latest" means last-seen in file order.
 function summarizeTaskEvents(events, eventLogPath) {
-  const orderedEvents = events
-    .slice()
-    .sort((a, b) => compareTimestamp(eventTimestamp(a), eventTimestamp(b)))
-  const summary = {
-    eventLogPath,
-    eventCount: events.length,
-    lastEventAt: undefined,
-    lastHeartbeatAt: undefined,
-    phase: undefined,
-    blockedReason: undefined,
-    latestSummary: undefined,
-  }
-  for (const event of orderedEvents) {
-    if (!event || typeof event !== 'object') continue
-    const { type } = event
-    const timestamp = eventTimestamp(event)
-    if (timestamp) summary.lastEventAt = timestamp
-    if (type === 'heartbeat') {
-      summary.lastHeartbeatAt = timestamp || summary.lastHeartbeatAt
-    }
-    if (type === 'phase_started') {
-      summary.phase = event.phase || event.phaseName || event.message || summary.phase
-    }
-    if (type === 'blocked' || type === 'block' || type === 'stuck') {
-      summary.blockedReason = event.reason || event.message || summary.blockedReason
-    }
-    if (type === 'checkpoint' || type === 'heartbeat' || type === 'message' || type === 'summary') {
-      const text = event.summary || event.message
-      if (text) summary.latestSummary = text
-    }
-  }
-  return summary
+  const summary = summarizeEventList(events, eventLogPath)
+  return { ...summary, ...assessHeartbeat(summary) }
 }
 
 // Trim an event down to a small whitelist of fields so recentEvents doesn't
 // echo large payloads back to the caller.
 function trimEvent(event) {
-  if (!event || typeof event !== 'object') return null
-  const out = {}
-  for (const key of [
-    'type',
-    'timestamp',
-    'taskId',
-    'phase',
-    'message',
-    'summary',
-    'reason',
-    'label',
-    'command',
-    'status',
-    'exitCode',
-    'signal',
-    'timedOut',
-    'cancelled',
-    'durationMs',
-    'pid',
-    'title',
-    'kind',
-    'dryRun',
-  ]) {
-    if (event[key] !== undefined) out[key] = event[key]
-  }
-  if (out.timestamp === undefined && event.ts !== undefined) out.timestamp = event.ts
-  return out
+  return trimProtocolEvent(event)
 }
 
 function eventTimestamp(event) {
@@ -582,7 +606,14 @@ async function buildRunEventView(summary, runDir, options = {}) {
     const eventsPath = entry.eventLogPath || (entry.taskDir ? path.join(entry.taskDir, 'events.jsonl') : null)
     if (!eventsPath) continue
     const { events } = await readEventsFile(eventsPath)
-    const taskSummary = summarizeTaskEvents(events, eventsPath)
+    const taskSummaryBase = summarizeTaskEvents(events, eventsPath)
+    const taskSummary = {
+      ...taskSummaryBase,
+      ...assessHeartbeat(taskSummaryBase, {
+        staleHeartbeatMs: options.staleHeartbeatMs,
+        slowEventMs: options.slowEventMs,
+      }),
+    }
     taskEvents.push({ taskId: entry.id, ...taskSummary })
     // Attach the same summary to the in-memory task result so callers reading
     // summary.tasks see last heartbeat/phase inline. run-summary.json on disk
@@ -601,7 +632,7 @@ async function buildRunEventView(summary, runDir, options = {}) {
     .slice()
     .sort((a, b) => compareTimestamp(a?.timestamp || a?.ts, b?.timestamp || b?.ts))
   const recentEvents = sorted.slice(-recentLimit).map(trimEvent).filter(Boolean)
-  return { recentEvents, taskEvents }
+  return { recentEvents, taskEvents, health: summarizeRunHealth(taskEvents) }
 }
 
 // When run-summary.json is missing (run in progress), reconstruct a minimal
@@ -632,10 +663,89 @@ function countRunsWithEventLogs(runs) {
   return count
 }
 
+function summarizeRunHealth(taskEvents = [], active = []) {
+  const activeIds = new Set((active || []).map((record) => record?.taskId).filter(Boolean))
+  const stalledTasks = []
+  const slowTasks = []
+  const blockedTasks = []
+  let needsController = false
+  let latestHeartbeatAt
+  let latestEventAt
+
+  for (const task of taskEvents || []) {
+    if (!task) continue
+    if (task.lastHeartbeatAt && (!latestHeartbeatAt || task.lastHeartbeatAt > latestHeartbeatAt)) {
+      latestHeartbeatAt = task.lastHeartbeatAt
+    }
+    if (task.lastEventAt && (!latestEventAt || task.lastEventAt > latestEventAt)) {
+      latestEventAt = task.lastEventAt
+    }
+    if (task.blockedReason) {
+      blockedTasks.push({ taskId: task.taskId, reason: task.blockedReason })
+      needsController = true
+    }
+    if (task.needsController) needsController = true
+    if (activeIds.size && task.taskId && !activeIds.has(task.taskId)) continue
+    if (task.stalled) {
+      stalledTasks.push({ taskId: task.taskId, lastHeartbeatAt: task.lastHeartbeatAt, lastEventAt: task.lastEventAt })
+      needsController = true
+    }
+    if (task.slow) {
+      slowTasks.push({ taskId: task.taskId, lastEventAt: task.lastEventAt })
+    }
+  }
+
+  return {
+    status: needsController ? 'needs_controller' : stalledTasks.length ? 'stalled' : slowTasks.length ? 'slow' : 'ok',
+    needsController,
+    stalledTasks,
+    slowTasks,
+    blockedTasks,
+    latestHeartbeatAt,
+    latestEventAt,
+  }
+}
+
+function suggestControllerAction(payload, health = {}) {
+  if (payload.done) return 'collect_complete'
+  if (health.needsController || health.stalledTasks?.length) return 'inspect_or_cancel_stalled_tasks'
+  if (health.slowTasks?.length) return 'continue_monitoring'
+  if (payload.active?.length) return 'continue_waiting'
+  return 'inspect_run_state'
+}
+
+function compactWatchPayload(payload, input = {}) {
+  return {
+    done: payload.done,
+    runId: payload.runId,
+    runDir: payload.runDir,
+    status: payload.status,
+    active: payload.active,
+    health: payload.health,
+    controllerSummary: input.includeControllerSummary === false ? undefined : payload.controllerSummary,
+    suggestedAction: payload.suggestedAction,
+    recentEvents: input.recentEventsLimit ? payload.recentEvents : undefined,
+    taskEvents: input.includeTaskEvents ? payload.taskEvents : undefined,
+  }
+}
+
+function attachOwnershipValidation(summary, tasks, results, workspace) {
+  try {
+    const ownership = validateRunFileOwnership({ tasks, results, workspace })
+    if (ownership?.violations?.length) summary.ownershipViolations = ownership.violations
+    if (ownership?.warnings?.length) summary.ownershipWarnings = ownership.warnings
+  } catch (error) {
+    summary.ownershipWarnings = [
+      ...(summary.ownershipWarnings || []),
+      { warning: 'ownership validation failed', detail: error?.message || String(error) },
+    ]
+  }
+}
+
 export async function cancelRun(runId) {
   // Signal the scheduler loop to stop starting pending tasks, then kill the
   // Claude processes that are already running for this run. Works for both
-  // synchronous runTaskPlan runs and asynchronous startTaskPlan runs — both
+  // synchronous runTaskPlan runs and asynchronous startTaskPlan runs - both
   // register the same cancellation record under runId.
   const cancellation = activeRuns.get(runId)
   if (cancellation) cancellation.cancelled = true

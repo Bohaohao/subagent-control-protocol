@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const DEFAULT_MANIFEST_URL =
   'https://raw.githubusercontent.com/Bohaohao/subagent-control-protocol/main/plugins/subagent-control-protocol/dist/latest.json'
-const BUNDLED_VERSION = '0.3.3'
+const BUNDLED_VERSION = '0.3.4'
 
 const bootstrapDir = path.dirname(fileURLToPath(import.meta.url))
 const localServerPath = path.join(bootstrapDir, 'server.mjs')

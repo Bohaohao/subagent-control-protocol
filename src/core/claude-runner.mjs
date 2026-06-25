@@ -14,6 +14,7 @@ import { safeJsonParse, writeJson } from './json.mjs'
 import { captureProcess, exists, killProcessTree } from './process-tree.mjs'
 
 const activeProcesses = new Map()
+const RUNTIME_HEARTBEAT_MS = 45_000
 
 export function listActiveProcesses(runId) {
   const records = runId
@@ -97,6 +98,7 @@ export async function runClaudeTask(task, context) {
       endedAt,
       taskDir,
       eventLogPath,
+      lastEventAt: lastEventTimestamp(eventLogPath),
       exitCode: 0,
       timedOut: false,
       cancelled: false,
@@ -161,6 +163,7 @@ export async function runClaudeTask(task, context) {
     endedAt,
     taskDir,
     eventLogPath,
+    lastEventAt: lastEventTimestamp(eventLogPath),
     exitCode: execution.exitCode,
     signal: execution.signal,
     timedOut: execution.timedOut,
@@ -268,8 +271,15 @@ Controller rules:
 Task event logging:
 - The environment exposes SCP_EVENT_LOG (path to a JSONL file), SCP_RUN_ID, SCP_TASK_ID, and SCP_TASK_DIR.
 - As you work, append one compact JSON object per line to the file at SCP_EVENT_LOG to report progress. Each line must be valid JSON on its own.
-- Emit events for these runtime milestones: phase_started (when beginning a distinct phase), heartbeat (periodic alive signal during long work), checkpoint (after a meaningful unit of progress), blocked (when waiting on something external or unable to proceed), command_started (before running a verification/shell command, include a short label), command_finished (after it, include exit code and pass/fail).
-- Keep events compact: include a short \`type\`, an ISO timestamp, and a brief text field. Never include full logs, diffs, file contents, or code in events. A label or one-line summary is enough.
+- Every event must carry a short \`type\` and an ISO \`timestamp\`. Reuse SCP_RUN_ID as \`runId\` and SCP_TASK_ID as \`taskId\` so events can be correlated back to this task. Beyond that, keep each event type's payload compact - a label or one-line summary is enough. Never include full logs, diffs, file contents, or code in events.
+- Emit events for these runtime milestones, each with the fields noted:
+  - phase_started: \`type\`, \`timestamp\`, \`phase\` (short name of the phase you are beginning).
+  - heartbeat: \`type\`, \`timestamp\`, \`runId\`, \`taskId\`, \`summary\` (one line on current progress), \`sequence\` (an integer that increments with every heartbeat so ordering is visible).
+  - checkpoint: \`type\`, \`timestamp\`, \`summary\` (one line on the unit of progress just completed).
+  - blocked: \`type\`, \`timestamp\`, \`reason\` (one line on what you are waiting on).
+  - command_started: \`type\`, \`timestamp\`, \`label\` (short name of the verification/shell command), \`command\` (one-line form, no full output).
+  - command_finished: \`type\`, \`timestamp\`, \`label\`, \`exitCode\`, \`status\` ('pass' | 'fail').
+- Send a heartbeat at least every 45 seconds during long work, incrementing \`sequence\` each time.
 - Event logging is best-effort and must never replace the required JSON result; if writing to SCP_EVENT_LOG fails, continue the task and still return the JSON result.
 
 Task:
@@ -364,6 +374,8 @@ function spawnClaude(options) {
     let stderr = ''
     let timedOut = false
     let settled = false
+    let heartbeatSequence = 0
+    let lastActivityAt = new Date().toISOString()
     const stdoutPath = path.join(options.taskDir, 'stdout.txt')
     const stderrPath = path.join(options.taskDir, 'stderr.txt')
     const activeKey = `${options.runId}:${options.taskId}`
@@ -389,11 +401,25 @@ function spawnClaude(options) {
       // best-effort: never break the run over event logging
     })
 
+    const heartbeat = setInterval(() => {
+      appendEvent(options.eventLogPath, {
+        type: 'heartbeat',
+        runId: options.runId,
+        taskId: options.taskId,
+        sequence: ++heartbeatSequence,
+        source: 'runtime',
+        summary: 'runtime heartbeat: Claude process is still active',
+        lastActivityAt,
+      }).catch(() => {})
+    }, RUNTIME_HEARTBEAT_MS)
+    heartbeat.unref?.()
+
     const finish = async ({ exitCode, signal }) => {
       if (settled) return
       settled = true
       clearTimeout(timeout)
       clearTimeout(killGraceTimeout)
+      clearInterval(heartbeat)
       activeProcesses.delete(activeKey)
       await fs.writeFile(stdoutPath, stdout, 'utf8')
       await fs.writeFile(stderrPath, stderr, 'utf8')
@@ -422,9 +448,11 @@ function spawnClaude(options) {
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
     child.stdout.on('data', (chunk) => {
+      lastActivityAt = new Date().toISOString()
       stdout += chunk
     })
     child.stderr.on('data', (chunk) => {
+      lastActivityAt = new Date().toISOString()
       stderr += chunk
     })
     child.on('error', async (error) => {
@@ -492,6 +520,19 @@ function terminalEventType(status) {
   return 'task_failed'
 }
 
+// Derive the timestamp of the most recently appended event cheaply from the
+// event log's mtime; never read the (potentially large) log contents. Returns
+// null when the log does not exist (e.g. spawn never finished) or cannot be
+// stated. Best-effort: callers treat a null as "no event observed yet".
+function lastEventTimestamp(eventLogPath) {
+  if (!eventLogPath) return null
+  try {
+    return statSync(eventLogPath).mtime.toISOString()
+  } catch {
+    return null
+  }
+}
+
 // Append one compact JSON object as a line to the per-task event log. Best
 // effort: event logging must never break a run, so failures are swallowed.
 async function appendEvent(eventLogPath, event) {
@@ -503,6 +544,6 @@ async function appendEvent(eventLogPath, event) {
     const line = JSON.stringify(normalized)
     await fs.appendFile(eventLogPath, `${line}\n`, 'utf8')
   } catch {
-    // ignore — event logging is best-effort
+    // ignore - event logging is best-effort
   }
 }

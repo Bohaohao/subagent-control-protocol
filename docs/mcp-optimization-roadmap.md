@@ -49,13 +49,55 @@ prevents the scheduler from starting tasks that are still pending.
 
 Reads `run-summary.json` or lists recent runs.
 
+Single-run mode now surfaces compact event state: `taskEvents`,
+`recentEvents`, heartbeat timestamps, `health`, and `controllerSummary`.
+
+### `subagent_start`
+
+Starts a dependency-aware plan in the background and immediately returns a run
+locator (`runId`, `runDir`, `outputDir`, `workspace`) for later collection.
+
+### `subagent_collect`
+
+Collects interim progress or the final `run-summary.json` for a run started by
+`subagent_start`. Supports run-id-only lookup through the persisted run
+registry when the output directory can be resolved.
+
+### `subagent_watch`
+
+Reads controller-friendly run health without starting work. It combines
+collect/status data with heartbeat-derived `health`, `controllerSummary`, and a
+`suggestedAction`. It supports `compact: true` for frequent low-token polling.
+
+### `subagent_cleanup`
+
+Plans or executes retention cleanup for run artifact directories. Dry-run mode
+is the default; deletion is restricted to direct child run directories under the
+selected `outputDir`.
+
+## Implemented optimization points
+
+- Structured event protocol and heartbeat health summaries, including runtime
+  periodic heartbeats while Claude child processes are active.
+- Async start/collect workflow with persisted run registry and recovery scan.
+- Controller summary aggregation for statuses, changed files, risks,
+  verification, usage evidence, and artifacts.
+- Result repair for fenced JSON, prose-wrapped JSON, Claude CLI envelopes, and
+  common alternate field names.
+- Ownership validation for read-only edits, out-of-bound file changes, and
+  cross-task file collisions.
+- Dry-run-first artifact cleanup with age/count/size retention options.
+- Compact watch/status controls for token-conscious polling.
+- Smoke coverage for async collect, watch, cleanup, and result repair.
+
 ## Next improvements
 
-- Stream task progress events instead of returning only after task completion.
-- Persist active process metadata so cancellation can survive client reconnects.
-- Add explicit workspace edit policies, such as read-only, single-writer, and
-  declared file ownership.
-- Add token and cost normalization across Claude Code output variants.
+- Persist active process metadata deeply enough for cancellation to survive an
+  MCP process restart, not only status lookup.
+- Add a tail-reader for very large `events.jsonl` files so status does not need
+  to read full event logs on huge runs.
+- Add explicit workspace edit policies at the MCP schema level, beyond current
+  result-time ownership validation.
 - Add a small result viewer for run directories.
 - Add JSON schema validation for user-provided task plans before execution.
 

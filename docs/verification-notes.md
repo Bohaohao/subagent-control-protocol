@@ -16,7 +16,9 @@ Verifies the bundled MCP runtime `dist/server.mjs`:
 3. Launches `node dist/server.mjs` and runs a basic MCP stdio smoke test over
    JSON-RPC: `initialize` → `notifications/initialized` → `tools/list`, and
    asserts the tool list includes the core subagent tools
-   (`subagent_run_task`, `subagent_run_many`, `subagent_status`).
+   (`subagent_run_task`, `subagent_run_many`, `subagent_start`,
+   `subagent_collect`, `subagent_watch`, `subagent_cleanup`,
+   `subagent_status`, `subagent_cancel`).
 
 The script uses only Node built-ins (no `@modelcontextprotocol/sdk` client) so
 it can run against a checkout where `node_modules` is absent. It is hard

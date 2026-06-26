@@ -44,12 +44,13 @@
     "start": "node ./src/server.mjs",
     "agent:run": "node scripts/run-claude-agents.mjs",
     "smoke:mcp": "node scripts/smoke-mcp.mjs",
+    "smoke:desktop-bridge": "node scripts/smoke-desktop-bridge.mjs",
     "text:check": "node scripts/check-text-health.mjs --root . --out ./.agent-checks/text-health-report.json",
     "build": "node build.mjs",
     "build:check": "node --check ./dist/server.mjs && node --check ./dist/bootstrap.mjs && node -e \"JSON.parse(require('fs').readFileSync('./dist/latest.json','utf8'))\"",
     "verify:bundle": "node scripts/verify-bundle-runtime.mjs",
     "verify:marketplace": "node scripts/verify-marketplace-plugin.mjs",
-    "check": "node --check ./build.mjs && node --check ./bin/subagent-control-protocol.mjs && node --check ./src/server.mjs && node --check ./src/bootstrap.mjs && node --check ./src/core/claude-runner.mjs && node --check ./src/core/json.mjs && node --check ./src/core/scheduler.mjs && node --check ./src/core/result-normalizer.mjs && node --check ./src/core/result-repair.mjs && node --check ./src/core/event-protocol.mjs && node --check ./src/core/cleanup.mjs && node --check ./src/core/ownership.mjs && node --check ./src/core/run-registry.mjs && node --check ./src/core/controller-summary.mjs && node --check ./src/core/process-tree.mjs && node --check ./scripts/run-claude-agents.mjs && node --check ./scripts/smoke-mcp.mjs && node --check ./scripts/check-text-health.mjs && node --check ./scripts/verify-bundle-runtime.mjs && node --check ./scripts/verify-marketplace-plugin.mjs"
+    "check": "node --check ./build.mjs && node --check ./bin/subagent-control-protocol.mjs && node --check ./src/server.mjs && node --check ./src/bootstrap.mjs && node --check ./src/core/claude-runner.mjs && node --check ./src/core/json.mjs && node --check ./src/core/scheduler.mjs && node --check ./src/core/result-normalizer.mjs && node --check ./src/core/result-repair.mjs && node --check ./src/core/event-protocol.mjs && node --check ./src/core/cleanup.mjs && node --check ./src/core/ownership.mjs && node --check ./src/core/run-registry.mjs && node --check ./src/core/controller-summary.mjs && node --check ./src/core/process-tree.mjs && node --check ./src/core/status-view.mjs && node --check ./src/core/status-mirror.mjs && node --check ./src/core/bridge-discovery.mjs && node --check ./src/core/status-bridge.mjs && node --check ./scripts/run-claude-agents.mjs && node --check ./scripts/smoke-mcp.mjs && node --check ./scripts/smoke-desktop-bridge.mjs && node --check ./scripts/check-text-health.mjs && node --check ./scripts/verify-bundle-runtime.mjs && node --check ./scripts/verify-marketplace-plugin.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

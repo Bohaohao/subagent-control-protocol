@@ -3,7 +3,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { executeCleanup, planCleanup } from './core/cleanup.mjs'
-import { cancelRun, collectRun, loadRunStatus, runTaskPlan, startTaskPlan, watchRun } from './core/scheduler.mjs'
+import { cancelRun, collectRun, filterIncrementalEvents, loadDesktopStatus, loadRunStatus, runTaskPlan, startTaskPlan, watchRun } from './core/scheduler.mjs'
+import { startStatusBridge, stopStatusBridge } from './core/status-bridge.mjs'
+import {
+  readBridgeDiscovery,
+  removeBridgeDiscovery,
+  writeBridgeDiscovery,
+} from './core/bridge-discovery.mjs'
 
 const server = new McpServer({
   name: 'subagent-control-protocol',
@@ -24,6 +30,9 @@ const server = new McpServer({
   ].join(' '),
 })
 
+let statusBridgeHandle = null
+let statusBridgeConfig = null
+
 const permissionMode = z.enum([
   'acceptEdits',
   'auto',
@@ -35,8 +44,9 @@ const permissionMode = z.enum([
 
 // Lifecycle status for a single task result. `completed`/`partial` come from the
 // subagent's own JSON; `failed`/`timed_out` are imposed by the runner when the
-// CLI exits non-zero or exceeds its timeout; `skipped` is set when a dependency
-// did not reach a completed/partial state; `cancelled` is set when a run stops
+// CLI exits non-zero or exceeds its idle timeout (no subagent-owned event or
+// heartbeat observed within timeoutMs); `skipped` is set when a dependency did
+// not reach a completed/partial state; `cancelled` is set when a run stops
 // before a pending task starts or an active process is killed by cancellation.
 const taskStatus = z
   .enum(['completed', 'partial', 'blocked', 'failed', 'skipped', 'timed_out', 'cancelled'])
@@ -50,7 +60,7 @@ const taskShape = {
   dependsOn: z.array(z.string()).optional(),
   model: z.string().optional(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
-  timeoutMs: z.number().int().positive().optional(),
+  timeoutMs: z.number().int().positive().optional().describe('Idle timeout in milliseconds. The task is timed out only when no subagent-owned event/heartbeat is observed for this long; active heartbeat/checkpoint events keep the task alive.'),
   permissionMode: permissionMode.optional(),
   addDirs: z.array(z.string()).optional(),
   allowedTools: z.array(z.string()).optional(),
@@ -62,7 +72,7 @@ const taskShape = {
 const defaultsShape = {
   model: z.string().optional(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
-  timeoutMs: z.number().int().positive().optional(),
+  timeoutMs: z.number().int().positive().optional().describe('Default idle timeout in milliseconds inherited by tasks. Heartbeat/checkpoint events from the subagent reset this idle window.'),
   permissionMode: permissionMode.optional(),
   addDirs: z.array(z.string()).optional(),
   allowedTools: z.array(z.string()).optional(),
@@ -265,6 +275,41 @@ const cleanupOutputShape = {
   error: z.object(errorDetailShape).optional(),
 }
 
+const desktopStatusOutputShape = {
+  ok: z.boolean(),
+  source: z.string().optional(),
+  view: z.record(z.string(), z.any()).nullable().optional(),
+  // Stable view-model contract tag (e.g. 'scp.run-view/v1') copied from the
+  // view so consumers can branch on schema without digging into `view`.
+  schema: z.string().nullable().optional(),
+  // True when a view (or mirror snapshot) is present. The RunViewModel is always
+  // redacted by buildRunViewModel: raw prompts, stdout/stderr, env, and full
+  // command bodies are never placed in the view; command/verification snippets
+  // pass through redactForDisplay. `raw` (debug only, opt-in) is NOT redacted.
+  redacted: z.boolean().optional(),
+  mirrorDir: z.string().nullable().optional(),
+  mirror: z.record(z.string(), z.any()).nullable().optional(),
+  raw: z.record(z.string(), z.any()).optional(),
+  error: z.object(errorDetailShape).optional(),
+}
+
+const statusBridgeOutputShape = {
+  ok: z.boolean(),
+  action: z.string().optional(),
+  running: z.boolean().optional(),
+  host: z.string().optional(),
+  port: z.number().int().optional(),
+  allowNonLoopback: z.boolean().optional(),
+  workspace: z.string().optional(),
+  outputDir: z.string().optional(),
+  intervalMs: z.number().int().optional(),
+  // Bridge discovery file facts (host/port/startedAt/pid/dir/path/updatedAt) so
+  // a desktop widget can locate the bridge without scraping ports. null when the
+  // bridge is not running or no discovery file is configured/present.
+  discovery: z.record(z.string(), z.any()).nullable().optional(),
+  error: z.object(errorDetailShape).optional(),
+}
+
 server.registerTool(
   'subagent_run_task',
   {
@@ -445,6 +490,66 @@ server.registerTool(
 )
 
 server.registerTool(
+  'subagent_desktop_status',
+  {
+    title: 'Read Desktop Status Snapshot',
+    description: 'Return a desktop-facing SCP status view model for a run or recent run list. Optionally read/write the stable status mirror for external desktop widgets.',
+    inputSchema: {
+      runId: z.string().optional().describe('Run id to read as a desktop view. When omitted, runDir or outputDir/list mode is used.'),
+      runDir: z.string().optional().describe('Run directory to read.'),
+      workspace: z.string().optional().describe('Workspace used to resolve default outputDir.'),
+      outputDir: z.string().optional().describe('Run artifact output directory. Defaults to <workspace>/.subagent-runs when applicable.'),
+      limit: z.number().int().positive().max(100).optional().describe('Recent run count in list mode.'),
+      recentEventsLimit: z.number().int().positive().max(1000).optional(),
+      staleHeartbeatMs: z.number().int().positive().optional(),
+      slowEventMs: z.number().int().positive().optional(),
+      mirrorDir: z.string().optional().describe('Override stable status mirror directory.'),
+      readMirror: z.boolean().optional().describe('Read the stable mirror. If no run/list input is supplied, only the mirror is returned.'),
+      writeMirror: z.boolean().optional().describe('Write the generated desktop view to the stable mirror. Defaults to false.'),
+      includeRaw: z.boolean().optional().describe('Include the raw subagent_status/subagent_collect payload for debugging. Defaults to false.'),
+    },
+    outputSchema: desktopStatusOutputShape,
+  },
+  async (input) => {
+    try {
+      return jsonToolResult(await loadDesktopStatus(input))
+    } catch (error) {
+      return errorToolResult(error, 'desktop_status_failed')
+    }
+  },
+)
+
+server.registerTool(
+  'subagent_status_bridge',
+  {
+    title: 'Control Local Desktop Status Bridge',
+    description: 'Start, stop, restart, or inspect the optional localhost HTTP/SSE status bridge for desktop widgets. The bridge is disabled until explicitly started.',
+    inputSchema: {
+      action: z.enum(['status', 'start', 'stop', 'restart']).optional().describe('Bridge action. Defaults to status.'),
+      host: z.string().optional().describe('Bind host. Defaults to 127.0.0.1. Non-loopback hosts require allowNonLoopback=true because the bridge has no authentication.'),
+      port: z.number().int().min(0).max(65535).optional().describe('Bind port. Defaults to 17361; 0 asks the OS to choose a free port.'),
+      allowNonLoopback: z.boolean().optional().describe('Explicitly allow binding the unauthenticated bridge to a non-loopback host. Defaults to false.'),
+      workspace: z.string().optional().describe('Workspace used to resolve default outputDir.'),
+      outputDir: z.string().optional().describe('Run artifact output directory to expose. Defaults to <workspace>/.subagent-runs.'),
+      limit: z.number().int().positive().max(100).optional().describe('Recent run count exposed by /runs.'),
+      recentEventsLimit: z.number().int().positive().max(1000).optional(),
+      staleHeartbeatMs: z.number().int().positive().optional(),
+      slowEventMs: z.number().int().positive().optional(),
+      intervalMs: z.number().int().positive().max(600000).optional().describe('SSE snapshot interval. Defaults to 5000 ms.'),
+      discoveryDir: z.string().optional().describe('Override directory for the bridge discovery file (bridge.json) that lets external widgets find host/port. Defaults to a stable per-user data dir.'),
+    },
+    outputSchema: statusBridgeOutputShape,
+  },
+  async (input) => {
+    try {
+      return jsonToolResult(await handleStatusBridge(input))
+    } catch (error) {
+      return errorToolResult(error, 'status_bridge_failed')
+    }
+  },
+)
+
+server.registerTool(
   'subagent_status',
   {
     title: 'Read Subagent Run Status',
@@ -515,6 +620,223 @@ function pickTaskFields(input) {
     tools: input.tools,
     systemPrompt: input.systemPrompt,
   }
+}
+
+async function handleStatusBridge(input = {}) {
+  const action = input.action || 'status'
+  if (action === 'status') return currentStatusBridgeState(action)
+
+  if ((action === 'stop' || action === 'restart') && statusBridgeHandle) {
+    await stopStatusBridge(statusBridgeHandle)
+    statusBridgeHandle = null
+    // Remove the discovery file best-effort so widgets stop seeing a stale
+    // bridge endpoint. Use the config captured at start (which carries the
+    // discoveryDir/outputDir/workspace needed to resolve the same file).
+    await removeBridgeDiscoverySafe(statusBridgeConfig)
+    statusBridgeConfig = null
+  }
+
+  if (action === 'stop') return currentStatusBridgeState(action)
+
+  if (action === 'start' && statusBridgeHandle) {
+    return currentStatusBridgeState(action)
+  }
+
+  const config = {
+    workspace: input.workspace,
+    outputDir: input.outputDir,
+    limit: input.limit,
+    recentEventsLimit: input.recentEventsLimit,
+    staleHeartbeatMs: input.staleHeartbeatMs,
+    slowEventMs: input.slowEventMs,
+    intervalMs: input.intervalMs || 5000,
+    discoveryDir: input.discoveryDir,
+  }
+  const handle = await startStatusBridge({
+    host: input.host,
+    port: input.port,
+    allowNonLoopback: input.allowNonLoopback,
+    providers: createStatusBridgeProviders(config),
+  })
+  statusBridgeHandle = handle
+  statusBridgeConfig = {
+    ...config,
+    host: handle.host,
+    port: handle.port,
+    allowNonLoopback: input.allowNonLoopback === true,
+    startedAt: handle.startedAt,
+  }
+  // Publish a discovery file so an external desktop widget can locate the
+  // bridge's host/port without scraping ports. Best-effort: a missing or
+  // unresolvable discovery dir simply means no file is written.
+  await writeBridgeDiscoverySafe(statusBridgeConfig)
+  return currentStatusBridgeState(action)
+}
+
+async function currentStatusBridgeState(action = 'status') {
+  // Surface the on-disk discovery file when present so a status query doubles
+  // as "where can a widget find the bridge". null when not running/no file.
+  const discovery = statusBridgeConfig
+    ? await readBridgeDiscovery(statusBridgeConfig).catch(() => null)
+    : null
+  return {
+    action,
+    running: Boolean(statusBridgeHandle),
+    host: statusBridgeHandle?.host,
+    port: statusBridgeHandle?.port,
+    allowNonLoopback: statusBridgeConfig?.allowNonLoopback,
+    workspace: statusBridgeConfig?.workspace,
+    outputDir: statusBridgeConfig?.outputDir,
+    intervalMs: statusBridgeConfig?.intervalMs,
+    discovery: discovery || null,
+  }
+}
+
+// Best-effort discovery-file writers/removers. Discovery is an optional
+// convenience for external widgets; a failure here must never fail a bridge
+// start/stop, so all errors are swallowed and surfaced only via the discovery
+// field of a subsequent status query.
+async function writeBridgeDiscoverySafe(config) {
+  if (!config) return null
+  try {
+    return await writeBridgeDiscovery({
+      discoveryDir: config.discoveryDir,
+      outputDir: config.outputDir,
+      workspace: config.workspace,
+      host: config.host,
+      port: config.port,
+      startedAt: config.startedAt,
+      pid: process.pid,
+    })
+  } catch {
+    return null
+  }
+}
+
+async function removeBridgeDiscoverySafe(config) {
+  if (!config) return null
+  try {
+    return await removeBridgeDiscovery({
+      discoveryDir: config.discoveryDir,
+      outputDir: config.outputDir,
+      workspace: config.workspace,
+    })
+  } catch {
+    return null
+  }
+}
+
+function createStatusBridgeProviders(config) {
+  return {
+    async getHealth() {
+      const status = await loadDesktopStatus({
+        ...config,
+        recentEventsLimit: config.recentEventsLimit || 5,
+      })
+      return {
+        ok: true,
+        schema: 'scp.bridge-health/v1',
+        timestamp: new Date().toISOString(),
+        health: status.view?.health || null,
+        counts: status.view?.counts || null,
+        activeTasks: status.view?.activeTasks || [],
+      }
+    },
+    async getRuns() {
+      return loadDesktopStatus(config)
+    },
+    async getRun(runId) {
+      return loadDesktopStatus({
+        ...config,
+        runId,
+      })
+    },
+    // /events?runId=&afterSequence=&since=&limit=. The bridge normalizes
+    // afterSequence to an integer cursor and since to a string; limit stays a
+    // string. We bound the underlying loadDesktopStatus read by limit, then apply
+    // filterIncrementalEvents so the response only carries events past the cursor
+    // — never the full event log. The source window is already bounded by
+    // buildRunViewModel, so this stays small even without a cursor.
+    async getEvents(query = {}) {
+      const limit = parseEventLimit(query.limit, config.recentEventsLimit ?? 20)
+      const status = await loadDesktopStatus({
+        ...config,
+        runId: query.runId,
+        runDir: query.runDir,
+        recentEventsLimit: limit,
+      })
+      const events = filterIncrementalEvents(status.view?.recentEvents || [], {
+        afterSequence: query.afterSequence,
+        since: query.since,
+        limit,
+      })
+      return {
+        ok: true,
+        schema: 'scp.bridge-events/v1',
+        runId: status.view?.runId || query.runId || null,
+        events,
+      }
+    },
+    // /events/stream. The bridge calls subscribe(listener) without forwarding
+    // query params, so `query` is empty for HTTP SSE clients; the signature
+    // accepts it for direct/in-process subscribers that want a bounded cursor.
+    // Each snapshot carries only the bounded view (which includes a bounded
+    // recentEvents tail), so the stream never emits full event logs.
+    subscribe(listener, query = {}) {
+      let closed = false
+      const recentEventsLimit = parseEventLimit(query.limit, config.recentEventsLimit || 5)
+      const emit = () => {
+        loadDesktopStatus({
+          ...config,
+          recentEventsLimit,
+        })
+          .then((status) => {
+            if (!closed) {
+              const snapshot = {
+                type: 'snapshot',
+                timestamp: new Date().toISOString(),
+                view: status.view,
+              }
+              // When a caller supplies a cursor, include a pre-filtered bounded
+              // events tail so incremental SSE consumers can advance without
+              // re-reading the whole window.
+              if (query.afterSequence !== undefined || query.since !== undefined) {
+                snapshot.events = filterIncrementalEvents(status.view?.recentEvents || [], {
+                  afterSequence: query.afterSequence,
+                  since: query.since,
+                })
+              }
+              listener(snapshot)
+            }
+          })
+          .catch((error) => {
+            if (!closed) {
+              listener({
+                type: 'error',
+                timestamp: new Date().toISOString(),
+                message: error?.message || String(error),
+              })
+            }
+          })
+      }
+      emit()
+      const timer = setInterval(emit, config.intervalMs || 5000)
+      return () => {
+        closed = true
+        clearInterval(timer)
+      }
+    },
+  }
+}
+
+// Parse the /events `limit` query param (a string from the bridge) into a
+// positive integer, falling back to `fallback` when absent/invalid. Capped at
+// 1000 to keep responses bounded. Returns a number usable as recentEventsLimit.
+function parseEventLimit(value, fallback) {
+  const n = Number.parseInt(value, 10)
+  if (Number.isFinite(n) && n > 0) return Math.min(n, 1000)
+  const f = Number.parseInt(fallback, 10)
+  return Number.isFinite(f) && f > 0 ? Math.min(f, 1000) : 20
 }
 
 function jsonToolResult(data) {

@@ -20,7 +20,11 @@
           "type": "string",
           "enum": ["low", "medium", "high", "xhigh", "max"]
         },
-        "timeoutMs": { "type": "integer", "minimum": 1000 },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "description": "Default idle timeout in milliseconds. A task times out only after this long without a subagent-owned event/heartbeat; active heartbeat/checkpoint events keep it alive."
+        },
         "permissionMode": {
           "type": "string",
           "enum": ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]
@@ -71,7 +75,11 @@
             "type": "string",
             "enum": ["low", "medium", "high", "xhigh", "max"]
           },
-          "timeoutMs": { "type": "integer", "minimum": 1000 },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "description": "Idle timeout in milliseconds. The task is timed out only after this long without a subagent-owned event/heartbeat, not after this much total wall-clock time."
+          },
           "permissionMode": {
             "type": "string",
             "enum": ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]

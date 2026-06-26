@@ -60,6 +60,8 @@ try {
   assert.ok(tools.tools.some((tool) => tool.name === 'subagent_status'))
   assert.ok(tools.tools.some((tool) => tool.name === 'subagent_watch'))
   assert.ok(tools.tools.some((tool) => tool.name === 'subagent_cleanup'))
+  assert.ok(tools.tools.some((tool) => tool.name === 'subagent_desktop_status'))
+  assert.ok(tools.tools.some((tool) => tool.name === 'subagent_status_bridge'))
 
   const run = await client.callTool({
     name: 'subagent_run_task',
@@ -334,6 +336,75 @@ try {
     undefined,
     'compact subagent_watch should not echo the full summary payload',
   )
+
+  const mirrorDir = path.join(tempDir, 'desktop-status-mirror')
+  const bridgeDiscoveryDir = path.join(tempDir, 'bridge-discovery')
+  const desktopStatus = await client.callTool({
+    name: 'subagent_desktop_status',
+    arguments: {
+      runId: asyncRunId,
+      runDir: asyncRunDir,
+      recentEventsLimit: 5,
+      mirrorDir,
+      writeMirror: true,
+    },
+  })
+  assert.equal(desktopStatus.structuredContent.ok, true, 'subagent_desktop_status must report ok=true')
+  assert.equal(desktopStatus.structuredContent.view.schema, 'scp.run-view/v1')
+  assert.equal(desktopStatus.structuredContent.view.runId, asyncRunId)
+  assert.equal(desktopStatus.structuredContent.mirror.ok, true, 'desktop status mirror write must succeed')
+
+  const desktopMirror = await client.callTool({
+    name: 'subagent_desktop_status',
+    arguments: {
+      mirrorDir,
+      readMirror: true,
+    },
+  })
+  assert.equal(desktopMirror.structuredContent.ok, true, 'desktop mirror read must report ok=true')
+  assert.equal(desktopMirror.structuredContent.view.runId, asyncRunId)
+
+  const bridgeRejected = await client.callTool({
+    name: 'subagent_status_bridge',
+    arguments: {
+      action: 'start',
+      host: '0.0.0.0',
+      port: 0,
+      outputDir: asyncOutputDir,
+      discoveryDir: bridgeDiscoveryDir,
+    },
+  })
+  assert.equal(bridgeRejected.structuredContent.ok, false, 'status bridge must reject non-loopback host by default')
+  assert.match(
+    bridgeRejected.structuredContent.error.message,
+    /allowNonLoopback=true/,
+    'non-loopback rejection must explain the explicit opt-in flag',
+  )
+
+  const bridgeStart = await client.callTool({
+    name: 'subagent_status_bridge',
+    arguments: {
+      action: 'start',
+      port: 0,
+      outputDir: asyncOutputDir,
+      discoveryDir: bridgeDiscoveryDir,
+      intervalMs: 1000,
+      recentEventsLimit: 5,
+    },
+  })
+  assert.equal(bridgeStart.structuredContent.ok, true, 'subagent_status_bridge start must report ok=true')
+  assert.equal(bridgeStart.structuredContent.running, true, 'status bridge must report running after start')
+  assert.equal(typeof bridgeStart.structuredContent.port, 'number')
+  const bridgeHealthResponse = await fetch(`http://127.0.0.1:${bridgeStart.structuredContent.port}/health`)
+  assert.equal(bridgeHealthResponse.status, 200, 'status bridge /health must respond 200')
+  const bridgeHealth = await bridgeHealthResponse.json()
+  assert.equal(bridgeHealth.ok, true, 'status bridge /health payload must report ok=true')
+  const bridgeStop = await client.callTool({
+    name: 'subagent_status_bridge',
+    arguments: { action: 'stop' },
+  })
+  assert.equal(bridgeStop.structuredContent.ok, true, 'subagent_status_bridge stop must report ok=true')
+  assert.equal(bridgeStop.structuredContent.running, false, 'status bridge must report stopped after stop')
 
   const cleanup = await client.callTool({
     name: 'subagent_cleanup',

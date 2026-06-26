@@ -437,6 +437,13 @@ Each run writes a timestamped directory:
 
 `tasks/<id>/events.jsonl` is an append-only log of structured lifecycle events. The runtime writes task/process start/exit events and a periodic runtime `heartbeat` while the Claude process is active; the Claude subprocess is also asked to emit `phase_started`, `checkpoint`, `blocked`, and `command_started`/`command_finished`. It is a structured event stream, **not** a capture of the subagent's full `stdout`/`stderr`. Read it (or, better, ask `subagent_status` for the derived `taskEvents`/`recentEvents` summary) to track live progress, latest phase, and recent heartbeats without touching process logs.
 
+`timeoutMs` is an **idle timeout**, not an absolute wall-clock deadline. A Claude
+subagent is expected to keep writing subagent-owned events (especially
+`heartbeat` or `checkpoint`) during long work. If no subagent-owned event is
+observed for `timeoutMs`, the runner treats the task as stalled and stops it.
+Runtime-owned heartbeats (`source: "runtime"`) prove the process is alive, but
+they do **not** reset the subagent idle timeout by themselves.
+
 Event entries are compact JSON objects. Common fields are:
 
 - `type` — event type, such as `task_started`, `phase_started`, `heartbeat`, `checkpoint`, `blocked`, `command_started`, `command_finished`, `process_exited`, or `task_completed`.
@@ -460,6 +467,160 @@ Read order for controllers:
 4. `subagent_watch` — controller health, stalled/slow task hints, and suggested next action for long-running async work.
 5. `tasks/<id>/raw-output.json` — only when debugging Claude's original envelope.
 6. `stdout.txt` / `stderr.txt` — artifact-only, for process-level diagnosis. Do not read these by default; prefer `subagent_status`, `subagent_watch`, and `events.jsonl` for observability.
+
+## Desktop status contract & integration boundary
+
+SCP is the **single status source**. A desktop monitor app, if you use one, is a
+**read-only observer** — it watches runs, it does not drive them. The desktop
+project is **separate** from this repository; SCP does not ship the desktop app,
+and the desktop app is not part of this plugin bundle.
+
+SCP 是唯一的**状态来源**。桌面监控应用（如有）只是**只读观察者**——它观察运行，
+不驱动运行。桌面项目是**独立**于本仓库的；SCP 不附带桌面应用，桌面应用也不属于本插件包。
+
+### Status source vs. observer
+
+- **SCP owns state.** Decomposition, dispatch, process lifecycle, heartbeats,
+  cancellation, and the final accept/ship decision all stay inside SCP and the
+  Codex controller. Only the controller may dispatch or cancel work.
+- **The desktop owns display.** It renders run/task status, health, heartbeats,
+  and events for a human. It never dispatches subagents, never cancels runs, and
+  never writes into SCP's run artifacts. Cancellation stays an MCP-layer
+  operation (`subagent_cancel`); the desktop can *show* a stalled run but must
+  not kill processes itself.
+
+### Stable mirror concept
+
+SCP already writes stable, per-run artifacts under
+`<workspace>/.subagent-runs/<runId>/`:
+
+```text
+.subagent-runs/<runId>/
+  run-summary.json     # overall run status, tasks, health hints
+  events.jsonl         # append-only lifecycle + heartbeat event stream
+  tasks/<id>/
+    result.json        # normalized per-task result
+    events.jsonl       # per-task event stream
+```
+
+This artifact directory remains the source of truth. `subagent_desktop_status`
+can also write an optional stable `status.json` mirror to
+`SCP_STATUS_MIRROR_DIR` (or a per-user default) so external desktop widgets do
+not have to chase versioned plugin cache paths.
+
+### Desktop status schema (`scp.run-view/v1`)
+
+The desktop view model is defined by `schemas/desktop-status.schema.json` and
+returned by both `subagent_desktop_status` and the status bridge. The
+versioning anchor is the top-level `schema` field (`scp.run-view/v1`), not the
+file path: consumers must check that field and tolerate additional fields and
+`null` gaps. Nested view tags include `scp.task-view/v1` (per task),
+`scp.event-view/v1` (per recent event), `scp.token-evidence/v1` (measured usage,
+`measured: false` when no numbers exist), `scp.status-mirror/v1` (the
+`status.json` envelope), and `scp.bridge-discovery/v1` (`bridge.json`). The
+model has `mode: "run"` (one run) and `mode: "list"` (runs overview), plus
+UI-friendly fields a widget can render directly: `displayStatus`, `statusTone`,
+`progressHint`, `health`, `counts`, `activeTaskCount`, `lastUsefulEventAt`, and
+`stalenessMs`.
+
+Default privacy posture: raw prompts, `stdout`/`stderr`, env, and full command
+bodies are never placed in the view in the first place. Commands and
+verification snippets are reduced to a display-safe `label` (program name, with
+leading `ENV=value` stripped) plus a redacted, truncated snippet that masks
+credential-shaped `<hint>=value` pairs and `Bearer <token>`. **This is a
+best-effort display filter, not a security boundary** — treat the view as
+display-only.
+
+桌面视图模型由 `schemas/desktop-status.schema.json` 定义，版本锚点是顶层 `schema`
+字段（`scp.run-view/v1`），消费者须据此判断版本并容忍多余字段与 `null` 缺口。默认隐私策略：原始 prompt、stdout/stderr、env 与完整命令体不会进入视图；命令/验证片段会被裁成显示安全的小段并遮蔽凭据形对的键值——这只是尽力而为的显示过滤，并非安全边界。
+
+### Status bridge contract
+
+> **Status: implemented, opt-in.** SCP ships an optional read-only localhost
+> status bridge. It is disabled by default and starts only when the controller
+> calls `subagent_status_bridge` with `action: "start"`.
+
+Read-only localhost endpoints (all `GET`, observer-side):
+
+| Route | Mirrors | Returns |
+| --- | --- | --- |
+| `GET /health` | `subagent_desktop_status` | bridge health, counts, active tasks |
+| `GET /runs` | `subagent_desktop_status` list mode | recent runs + active-process list |
+| `GET /run/:runId` | `subagent_desktop_status` run mode | one run view model |
+| `GET /events` | `recentEvents` window | bounded event tail |
+| `GET /events/stream` | periodic snapshot stream | SSE `snapshot` events |
+
+Contract rules for any bridge implementation:
+
+- **Loopback-only by default.** The bridge has no authentication, so
+  `subagent_status_bridge` rejects non-loopback hosts unless
+  `allowNonLoopback: true` is set explicitly.
+- **Read-only.** No `POST`/`PUT`/`DELETE`. The bridge never dispatches, cancels,
+  or mutates run state. Mutation stays on the MCP/tool layer.
+- **Bound the event tail.** Mirror the `recentEventsLimit` behavior of
+  `subagent_status`; never stream a full `events.jsonl` to the desktop.
+- **Tolerate partial state.** A run directory may be mid-write or incomplete.
+  Return an explicit `incomplete_or_unreadable` status rather than failing.
+- **No secrets.** Never surface `stdout.txt`/`stderr.txt` or raw prompt bodies by
+  default; the bridge exposes status/health/events, not full process logs.
+
+### Bridge discovery (`bridge.json`)
+
+When the bridge starts, SCP writes a small `bridge.json` discovery file (schema
+`scp.bridge-discovery/v1`) to a stable per-user location so a widget can find
+the bridge's `host`/`port` without scraping ports. It carries `host`, `port`,
+`startedAt`, `updatedAt`, `pid`, and optional `workspace`/`outputDir` — no
+secrets. It is written atomically on start and removed on stop; a missing or
+corrupt file reads back as `null`. Directory resolution (first non-empty wins):
+an explicit `discoveryDir` option; the `SCP_BRIDGE_DISCOVERY_DIR` env var; a
+stable per-user dir (`<homedir>/.scp/bridge`, or `%LOCALAPPDATA%\scp\bridge` on
+Windows); or the run `outputDir`/`taskDir` as a fallback. A widget reads
+`bridge.json`, then connects to `http://<host>:<port>`; if the file is absent
+the bridge may simply not be running — retry rather than error.
+
+### Incremental event consumption
+
+`GET /events` supports cursor-based incremental reads: `afterSequence` (integer
+cursor — events with `sequence` greater than this), `since` (ISO timestamp
+lower bound), and `limit` (max events). The tail is always bounded — the view
+keeps at most a small `recentEvents` window (newest last), mirroring
+`subagent_status`'s `recentEventsLimit`; the bridge never streams a full
+`events.jsonl`. `afterSequence` only applies to events with a numeric
+`sequence`; null-sequence events are omitted from cursor responses and remain
+visible through fresh snapshots or `since` polling. If a widget's cursor falls
+outside the bounded tail and returns no events, keep the last rendered snapshot
+and refresh from `/run/:runId` or `/runs`. `GET /events/stream` is an SSE channel that sends a
+`: connected` comment on connect, then periodic `snapshot` events, with a
+`: ping` keep-alive roughly every 15 seconds so a dead bridge is detectable
+even without event traffic. The stream is observer-only.
+
+### Heartbeat semantics for observers
+
+The runtime writes a periodic `heartbeat` event to `events.jsonl` (with a
+monotonic `sequence`) while a Claude child process is active; the Claude
+subprocess is also asked to emit `phase_started`, `checkpoint`, `blocked`, and
+`command_started`/`command_finished`. For an observer:
+
+- A **fresh heartbeat** means the run is alive; show the latest `phase` and
+  `sequence`.
+- A **stale or missing heartbeat** means "unknown / possibly stalled" — display
+  it as such, but **do not** infer death or kill the process. The controller
+  decides cancellation via `subagent_cancel` / `subagent_watch`'s
+  `suggestedAction`; the desktop only surfaces the signal.
+- Heartbeats are best-effort. Malformed or interleaved event lines are ignored;
+  a gap in `sequence` is informational, not an error.
+
+### Read-only desktop behavior (hard rule)
+
+The desktop app and any status bridge must be **read-only** with respect to SCP:
+
+- Never write into `.subagent-runs/` or any run directory.
+- Never call dispatch/cancel MCP tools on the controller's behalf.
+- Treat the mirror as immutable artifacts produced by SCP; the desktop is a
+  viewer, not a participant.
+
+桌面与状态桥接对 SCP 必须**只读**：不得写入 `.subagent-runs/`；不得代总控调用派发/取消工具；
+镜像目录是 SCP 产出的不可变产物，桌面只是查看者，不参与执行。
 
 ## Safety Notes
 

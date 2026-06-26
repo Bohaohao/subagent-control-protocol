@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "desktop-status.schema.json",
+  "title": "SCP desktop status view model",
+  "description": "Stable, UI-facing snapshot produced by buildRunViewModel() in src/core/status-view.mjs. The desktop monitor app and the optional status bridge render this directly. It is intentionally display-oriented: raw prompts, stdout/stderr, env, and full command bodies are kept out by default; commands and verification snippets are reduced to display-safe summaries. The shape covers both a single-run view (mode 'run') and a list view (mode 'list'). Nested optional properties are documented but not enforced exhaustively — consumers should tolerate additional fields and null gaps (a missing/unknown value is null, never an exception).",
+  "type": "object",
+  "required": ["schema"],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "scp.run-view/v1",
+      "description": "Versioned contract identifier for the desktop run view model."
+    },
+    "mode": {
+      "type": ["string", "null"],
+      "enum": ["run", "list", null],
+      "description": "'run' for a single run snapshot; 'list' for the runs overview. null when undetermined."
+    },
+    "runId": { "type": ["string", "null"], "description": "Stable run identifier, or null when not yet assigned." },
+    "runDir": { "type": ["string", "null"], "description": "Filesystem path to the run artifact directory, or null." },
+    "status": {
+      "type": ["string", "null"],
+      "enum": ["running", "completed", "failed", "blocked", "cancelled", "partial", "skipped", "list", "unknown", null],
+      "description": "Machine status resolved from runtime + counts."
+    },
+    "phase": {
+      "type": ["string", "null"],
+      "enum": ["in_progress", "final", "list", null],
+      "description": "Coarse lifecycle phase."
+    },
+    "displayStatus": {
+      "type": ["string", "null"],
+      "enum": ["Running", "Completed", "Failed", "Blocked", "Cancelled", "Partial", "Skipped", "List", "Stale", "Idle", null],
+      "description": "Human-friendly status label suitable for direct rendering in a status bar or tray."
+    },
+    "statusTone": {
+      "type": ["string", "null"],
+      "enum": ["positive", "warning", "negative", "neutral", "active", null],
+      "description": "Suggested UI tone/color for the status. 'active' = in progress, 'positive' = healthy/done, 'warning' = blocked or stale, 'negative' = failed, 'neutral' = no signal."
+    },
+    "progressHint": {
+      "type": ["string", "null"],
+      "description": "One-line progress summary, e.g. '3/5 tasks, 1 failed, 1 active'. null when there is nothing to summarize."
+    },
+    "activeTaskCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of currently active (in-flight) subagent tasks."
+    },
+    "lastUsefulEventAt": {
+      "type": ["string", "null"],
+      "description": "ISO timestamp of the most recent forward-progress event (heartbeat, checkpoint, command, phase/task transition). null when no events are available."
+    },
+    "stalenessMs": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Milliseconds since lastUsefulEventAt (or, in list mode, since the oldest active-task heartbeat). null when not computable. Compare against the run's staleMs threshold to flag a stalled run."
+    },
+    "startedAt": { "type": ["string", "null"] },
+    "endedAt": { "type": ["string", "null"] },
+    "recovered": { "type": "boolean", "description": "Present and true when the run was recovered after a crash/restart." },
+    "dryRun": { "type": "boolean" },
+    "error": { "type": ["string", "null"], "description": "Short, snippet-sized error summary when the run failed." },
+    "counts": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Task outcome tallies.",
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "completed": { "type": "integer", "minimum": 0 },
+        "partial": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "cancelled": { "type": "integer", "minimum": 0 },
+        "timedOut": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Coarse render-friendly health signal.",
+      "properties": {
+        "level": { "type": "string", "enum": ["ok", "running", "warning", "error", "unknown"] },
+        "running": { "type": "boolean" },
+        "activeCount": { "type": "integer", "minimum": 0 },
+        "staleCount": { "type": "integer", "minimum": 0 },
+        "failedCount": { "type": "integer", "minimum": 0 },
+        "blockedCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "description": "Task view models for the run's tasks.",
+      "items": { "$ref": "#/$defs/taskView" }
+    },
+    "activeTasks": {
+      "type": "array",
+      "description": "In-flight subagent process records (taskId, pid, heartbeats, phase).",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "recentEvents": {
+      "type": "array",
+      "description": "Bounded tail of recent event view models (newest last).",
+      "items": { "$ref": "#/$defs/eventView" }
+    },
+    "tokenEvidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Measured (never self-reported) token/cost evidence. measured=false when no usage numbers are available.",
+      "properties": {
+        "schema": { "type": "string", "const": "scp.token-evidence/v1" },
+        "measured": { "type": "boolean" },
+        "totals": { "type": "object", "additionalProperties": true },
+        "note": { "type": "string" }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Display-safe artifact paths (run dir, summary, per-task result/event log paths).",
+      "properties": {
+        "runDir": { "type": ["string", "null"] },
+        "runSummaryPath": { "type": ["string", "null"] },
+        "runInputPath": { "type": ["string", "null"] },
+        "tasks": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+      }
+    },
+    "outputDir": { "type": ["string", "null"], "description": "List mode: the runs output directory." },
+    "runs": {
+      "type": "array",
+      "description": "List mode: lightweight recent-run entries.",
+      "items": { "type": "object", "additionalProperties": true }
+    }
+  },
+  "$defs": {
+    "taskView": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "A single task result reduced to a display-safe view. Command bodies are redacted to summaries; no prompt/stdout/stderr/env is surfaced.",
+      "properties": {
+        "schema": { "type": "string", "const": "scp.task-view/v1" },
+        "taskId": { "type": ["string", "null"] },
+        "title": { "type": ["string", "null"] },
+        "status": { "type": ["string", "null"] },
+        "kind": { "type": ["string", "null"] },
+        "taskDir": { "type": ["string", "null"] },
+        "resultPath": { "type": ["string", "null"] },
+        "eventLogPath": { "type": ["string", "null"] },
+        "startedAt": { "type": ["string", "null"] },
+        "endedAt": { "type": ["string", "null"] },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "filesChanged": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "path": { "type": "string" },
+              "change": { "type": "string" }
+            }
+          }
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "risk": { "type": "string" },
+              "severity": { "type": "string", "enum": ["high", "medium", "low"] },
+              "mitigation": { "type": "string" }
+            }
+          }
+        },
+        "verification": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/checkItem" }
+        },
+        "commandsRun": {
+          "type": "array",
+          "description": "Display-safe command summaries. `label` is the program name; `command` is a redacted, truncated snippet — never the full command body.",
+          "items": { "$ref": "#/$defs/checkItem" }
+        },
+        "nextSteps": { "type": "array", "items": { "type": "string" } },
+        "tokenEvidence": { "type": "object", "additionalProperties": true },
+        "blocked": { "type": ["string", "boolean", "null"] },
+        "error": { "type": ["string", "null"] }
+      }
+    },
+    "checkItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "label": { "type": ["string", "null"], "description": "Short program/action label (commands only)." },
+        "command": { "type": ["string", "null"], "description": "Redacted, truncated command/check snippet." },
+        "check": { "type": ["string", "null"] },
+        "status": { "type": ["string", "null"], "enum": ["passed", "failed", "skipped", "notRun", null] },
+        "notes": { "type": ["string", "null"] },
+        "evidence": { "type": ["string", "null"] }
+      }
+    },
+    "eventView": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "A single JSONL event reduced to render-relevant fields.",
+      "properties": {
+        "schema": { "type": "string", "const": "scp.event-view/v1" },
+        "type": { "type": ["string", "null"] },
+        "timestamp": { "type": ["string", "null"] },
+        "runId": { "type": ["string", "null"] },
+        "taskId": { "type": ["string", "null"] },
+        "phase": { "type": ["string", "null"] },
+        "label": { "type": ["string", "null"] },
+        "summary": { "type": ["string", "null"] },
+        "message": { "type": ["string", "null"] },
+        "reason": { "type": ["string", "null"] },
+        "status": { "type": ["string", "null"] },
+        "exitCode": { "type": ["integer", "null"] },
+        "sequence": {
+          "type": ["integer", "null"],
+          "description": "Monotonic event cursor when available. Cursor reads using afterSequence only include events with numeric sequence values; null-sequence events remain snapshot-only."
+        },
+        "durationMs": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

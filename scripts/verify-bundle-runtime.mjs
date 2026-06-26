@@ -206,6 +206,8 @@ async function checkRuntimeSmoke(entryPath, label, env = {}) {
         'subagent_collect',
         'subagent_watch',
         'subagent_cleanup',
+        'subagent_desktop_status',
+        'subagent_status_bridge',
         'subagent_status',
         'subagent_cancel',
       ]) {

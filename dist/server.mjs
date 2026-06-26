@@ -3363,8 +3363,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path7) {
-      let input = path7;
+    function removeDotSegments(path9) {
+      let input = path9;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3617,8 +3617,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path7, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path7 && path7 !== "/" ? path7 : void 0;
+        const [path9, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path9 && path9 !== "/" ? path9 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -3677,7 +3677,7 @@ var require_schemes = __commonJS({
       urnComponent.nss = (uuidComponent.uuid || "").toLowerCase();
       return urnComponent;
     }
-    var http = (
+    var http2 = (
       /** @type {SchemeHandler} */
       {
         scheme: "http",
@@ -3690,7 +3690,7 @@ var require_schemes = __commonJS({
       /** @type {SchemeHandler} */
       {
         scheme: "https",
-        domainHost: http.domainHost,
+        domainHost: http2.domainHost,
         parse: httpParse,
         serialize: httpSerialize
       }
@@ -3734,7 +3734,7 @@ var require_schemes = __commonJS({
     var SCHEMES = (
       /** @type {Record<SchemeName, SchemeHandler>} */
       {
-        http,
+        http: http2,
         https,
         ws,
         wss,
@@ -7057,12 +7057,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs7, exportName) {
+    function addFormats(ajv, list, fs9, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs7[f]);
+        ajv.addFormat(f, fs9[f]);
     }
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -7455,8 +7455,8 @@ function getErrorMap() {
 // node_modules/zod/v3/helpers/parseUtil.js
 init_define_SCP_RESULT_SCHEMA_INLINE();
 var makeIssue = (params) => {
-  const { data, path: path7, errorMaps, issueData } = params;
-  const fullPath = [...path7, ...issueData.path || []];
+  const { data, path: path9, errorMaps, issueData } = params;
+  const fullPath = [...path9, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7575,11 +7575,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path7, key) {
+  constructor(parent, value, path9, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path7;
+    this._path = path9;
     this._key = key;
   }
   get path() {
@@ -11512,10 +11512,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path7) {
-  if (!path7)
+function getElementAtPath(obj, path9) {
+  if (!path9)
     return obj;
-  return path7.reduce((acc, key) => acc?.[key], obj);
+  return path9.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -11924,11 +11924,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path7, issues) {
+function prefixIssues(path9, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path7);
+    iss.path.unshift(path9);
     return iss;
   });
 }
@@ -12075,16 +12075,16 @@ function flattenError(error51, mapper = (issue2) => issue2.message) {
 }
 function formatError(error51, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error52, path7 = []) => {
+  const processError = (error52, path9 = []) => {
     for (const issue2 of error52.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path7, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path9, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path9, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path9, ...issue2.path]);
       } else {
-        const fullpath = [...path7, ...issue2.path];
+        const fullpath = [...path9, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -12111,17 +12111,17 @@ function formatError(error51, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error51, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error52, path7 = []) => {
+  const processError = (error52, path9 = []) => {
     var _a3, _b;
     for (const issue2 of error52.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path7, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path9, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path9, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path9, ...issue2.path]);
       } else {
-        const fullpath = [...path7, ...issue2.path];
+        const fullpath = [...path9, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -12153,8 +12153,8 @@ function treeifyError(error51, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path7 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path7) {
+  const path9 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path9) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -25368,13 +25368,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path7 = ref.slice(1).split("/").filter(Boolean);
-  if (path7.length === 0) {
+  const path9 = ref.slice(1).split("/").filter(Boolean);
+  if (path9.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path7[0] === defsKey) {
-    const key = path7[1];
+  if (path9[0] === defsKey) {
+    const key = path9[1];
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -31410,9 +31410,9 @@ function normalizeOptions(options = {}) {
 }
 function toPositiveNumber(value) {
   if (value === null || value === void 0 || value === "") return null;
-  const num2 = Number(value);
-  if (!Number.isFinite(num2) || num2 < 0) return null;
-  return num2;
+  const num3 = Number(value);
+  if (!Number.isFinite(num3) || num3 < 0) return null;
+  return num3;
 }
 function isDirectChild(parentDir, childDir) {
   const parent = path2.resolve(parentDir);
@@ -31652,8 +31652,8 @@ function pickRun(run) {
 
 // src/core/scheduler.mjs
 init_define_SCP_RESULT_SCHEMA_INLINE();
-import fs6 from "node:fs/promises";
-import path6 from "node:path";
+import fs7 from "node:fs/promises";
+import path7 from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/core/claude-runner.mjs
@@ -32337,6 +32337,19 @@ async function collectDescendants(pid, seen = /* @__PURE__ */ new Set()) {
 // src/core/claude-runner.mjs
 var activeProcesses = /* @__PURE__ */ new Map();
 var RUNTIME_HEARTBEAT_MS = 45e3;
+var IDLE_CHECK_MAX_MS = 1e4;
+var TIMEOUT_GRACE_MS = 1e4;
+var RUNTIME_EVENT_TYPES = /* @__PURE__ */ new Set([
+  "task_started",
+  "process_started",
+  "process_exited",
+  "task_completed",
+  "task_partial",
+  "task_blocked",
+  "task_failed",
+  "task_timed_out",
+  "task_cancelled"
+]);
 function listActiveProcesses(runId) {
   const records = runId ? [...activeProcesses.values()].filter((record2) => record2.runId === runId) : [...activeProcesses.values()];
   return records.map(({ runId: runId2, taskId, title, pid, startedAt, eventLogPath }) => {
@@ -32395,6 +32408,7 @@ async function runClaudeTask(task, context) {
     dependsOn: task.dependsOn,
     command: command.display,
     timeoutMs: task.timeoutMs,
+    timeoutMode: "idle",
     cwd: task.workspace,
     eventLogPath
   });
@@ -32563,6 +32577,7 @@ Task event logging:
 - The environment exposes SCP_EVENT_LOG (path to a JSONL file), SCP_RUN_ID, SCP_TASK_ID, and SCP_TASK_DIR.
 - As you work, append one compact JSON object per line to the file at SCP_EVENT_LOG to report progress. Each line must be valid JSON on its own.
 - Every event must carry a short \`type\` and an ISO \`timestamp\`. Reuse SCP_RUN_ID as \`runId\` and SCP_TASK_ID as \`taskId\` so events can be correlated back to this task. Beyond that, keep each event type's payload compact - a label or one-line summary is enough. Never include full logs, diffs, file contents, or code in events.
+- Event logging is required for long-running work. The controller treats timeoutMs (${task.timeoutMs} ms) as an idle timeout since the last subagent-owned event/heartbeat, not as an absolute wall-clock deadline. If you do not emit events for longer than that window, the controller may treat the task as stalled and stop it.
 - Emit events for these runtime milestones, each with the fields noted:
   - phase_started: \`type\`, \`timestamp\`, \`phase\` (short name of the phase you are beginning).
   - heartbeat: \`type\`, \`timestamp\`, \`runId\`, \`taskId\`, \`summary\` (one line on current progress), \`sequence\` (an integer that increments with every heartbeat so ordering is visible).
@@ -32570,8 +32585,8 @@ Task event logging:
   - blocked: \`type\`, \`timestamp\`, \`reason\` (one line on what you are waiting on).
   - command_started: \`type\`, \`timestamp\`, \`label\` (short name of the verification/shell command), \`command\` (one-line form, no full output).
   - command_finished: \`type\`, \`timestamp\`, \`label\`, \`exitCode\`, \`status\` ('pass' | 'fail').
-- Send a heartbeat at least every 45 seconds during long work, incrementing \`sequence\` each time.
-- Event logging is best-effort and must never replace the required JSON result; if writing to SCP_EVENT_LOG fails, continue the task and still return the JSON result.
+- Send a heartbeat at least every 45 seconds during long work, incrementing \`sequence\` each time. Do this even while reading, planning, waiting for commands, or preparing the final JSON.
+- Event logging must never replace the required JSON result; if writing to SCP_EVENT_LOG fails, return a compact JSON result or a blocked status promptly rather than working silently for a long time.
 
 Task:
 ${task.prompt}
@@ -32653,12 +32668,24 @@ function spawnClaude(options) {
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let timeoutReason = null;
     let settled = false;
     let heartbeatSequence = 0;
-    let lastActivityAt = (/* @__PURE__ */ new Date()).toISOString();
+    let lastActivityMs = Date.now();
+    let lastActivityAt = new Date(lastActivityMs).toISOString();
+    let lastActivitySource = "process_started";
+    let eventLogOffset = 0;
+    let checkingIdle = false;
     const stdoutPath = path3.join(options.taskDir, "stdout.txt");
     const stderrPath = path3.join(options.taskDir, "stderr.txt");
     const activeKey = `${options.runId}:${options.taskId}`;
+    const markSubagentActivity = (source) => {
+      lastActivityMs = Date.now();
+      lastActivityAt = new Date(lastActivityMs).toISOString();
+      lastActivitySource = source || "event";
+      record2.lastSubagentActivityAt = lastActivityAt;
+      record2.lastSubagentActivitySource = lastActivitySource;
+    };
     const record2 = {
       runId: options.runId,
       taskId: options.taskId,
@@ -32666,7 +32693,11 @@ function spawnClaude(options) {
       pid: child.pid,
       startedAt: (/* @__PURE__ */ new Date()).toISOString(),
       cancelled: false,
-      eventLogPath: options.eventLogPath
+      eventLogPath: options.eventLogPath,
+      timeoutMs: options.timeoutMs,
+      timeoutMode: "idle",
+      lastSubagentActivityAt: lastActivityAt,
+      lastSubagentActivitySource: lastActivitySource
     };
     activeProcesses.set(activeKey, record2);
     appendEvent(options.eventLogPath, {
@@ -32692,7 +32723,7 @@ function spawnClaude(options) {
     const finish = async ({ exitCode, signal }) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
+      clearInterval(timeout);
       clearTimeout(killGraceTimeout);
       clearInterval(heartbeat);
       activeProcesses.delete(activeKey);
@@ -32706,26 +32737,55 @@ function spawnClaude(options) {
         exitCode,
         signal: signal || null,
         timedOut,
+        timeoutReason,
         cancelled: Boolean(record2.cancelled)
       });
-      resolve({ stdout, stderr, exitCode, signal, timedOut, cancelled: Boolean(record2.cancelled) });
+      resolve({ stdout, stderr, exitCode, signal, timedOut, timeoutReason, cancelled: Boolean(record2.cancelled) });
     };
     let killGraceTimeout = null;
-    const timeout = setTimeout(async () => {
-      timedOut = true;
-      await killProcessTree(child.pid);
-      killGraceTimeout = setTimeout(async () => {
-        await finish({ exitCode: 1, signal: "timeout_grace_expired" });
-      }, 1e4);
-    }, options.timeoutMs);
+    const checkIntervalMs = Math.min(IDLE_CHECK_MAX_MS, Math.max(1e3, Math.floor(options.timeoutMs / 10)));
+    const checkIdleTimeout = async () => {
+      if (settled || timedOut || checkingIdle) return;
+      checkingIdle = true;
+      try {
+        const scan = await scanSubagentEventActivity(options.eventLogPath, eventLogOffset);
+        eventLogOffset = scan.offset;
+        if (scan.activity) markSubagentActivity(scan.activity.type);
+        const idleMs = Date.now() - lastActivityMs;
+        if (idleMs < options.timeoutMs) return;
+        timedOut = true;
+        timeoutReason = "idle_timeout";
+        clearInterval(timeout);
+        await appendEvent(options.eventLogPath, {
+          type: "idle_timeout",
+          source: "runtime",
+          runId: options.runId,
+          taskId: options.taskId,
+          summary: "No subagent-owned event or heartbeat was observed within timeoutMs.",
+          timeoutMs: options.timeoutMs,
+          idleMs,
+          lastSubagentActivityAt: lastActivityAt,
+          lastSubagentActivitySource: lastActivitySource
+        });
+        await killProcessTree(child.pid);
+        killGraceTimeout = setTimeout(async () => {
+          await finish({ exitCode: 1, signal: "timeout_grace_expired" });
+        }, TIMEOUT_GRACE_MS);
+      } finally {
+        checkingIdle = false;
+      }
+    };
+    const timeout = setInterval(() => {
+      checkIdleTimeout().catch(() => {
+      });
+    }, checkIntervalMs);
+    timeout.unref?.();
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
-      lastActivityAt = (/* @__PURE__ */ new Date()).toISOString();
       stdout += chunk;
     });
     child.stderr.on("data", (chunk) => {
-      lastActivityAt = (/* @__PURE__ */ new Date()).toISOString();
       stderr += chunk;
     });
     child.on("error", async (error51) => {
@@ -32784,6 +32844,47 @@ function lastEventTimestamp(eventLogPath) {
   } catch {
     return null;
   }
+}
+async function scanSubagentEventActivity(eventLogPath, offset = 0) {
+  if (!eventLogPath) return { offset, activity: null };
+  let handle;
+  try {
+    handle = await fs4.open(eventLogPath, "r");
+    const stats = await handle.stat();
+    const start = Number.isInteger(offset) && offset >= 0 && offset <= stats.size ? offset : 0;
+    if (stats.size <= start) return { offset: stats.size, activity: null };
+    const length = stats.size - start;
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, start);
+    let activity = null;
+    const lines = buffer.toString("utf8").split(/\r?\n/);
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (isSubagentActivityEvent(event)) activity = event;
+    }
+    return { offset: stats.size, activity };
+  } catch {
+    return { offset, activity: null };
+  } finally {
+    if (handle) {
+      await handle.close().catch(() => {
+      });
+    }
+  }
+}
+function isSubagentActivityEvent(event) {
+  if (!event || typeof event !== "object" || Array.isArray(event)) return false;
+  const type = typeof event.type === "string" ? event.type : "";
+  if (!type) return false;
+  if (event.source === "runtime") return false;
+  if (RUNTIME_EVENT_TYPES.has(type)) return false;
+  return true;
 }
 async function appendEvent(eventLogPath, event) {
   if (!eventLogPath) return;
@@ -33657,11 +33758,802 @@ function validateRunFileOwnership({ tasks, results, workspace } = {}) {
   return { violations, warnings, collisions };
 }
 
-// src/core/run-registry.mjs
+// src/core/status-mirror.mjs
 init_define_SCP_RESULT_SCHEMA_INLINE();
 import fs5 from "node:fs/promises";
 import os4 from "node:os";
 import path5 from "node:path";
+var MIRROR_FILENAME = "status.json";
+var SCHEMA = "scp.status-mirror/v1";
+function resolveStatusMirrorDir(options = {}) {
+  const env = options.env && typeof options.env === "object" ? options.env : process.env;
+  const explicit = nonEmptyString(options.mirrorDir) || nonEmptyString(env.SCP_STATUS_MIRROR_DIR);
+  if (explicit) return path5.resolve(explicit);
+  const userData = defaultUserDataDir(env);
+  if (userData) return path5.join(userData, "scp", "status");
+  const fallback = nonEmptyString(options.outputDir) || nonEmptyString(options.taskDir);
+  return fallback ? path5.resolve(fallback) : null;
+}
+async function writeStatusMirror(input = {}) {
+  const mirrorDir = resolveStatusMirrorDir(input);
+  if (!mirrorDir) {
+    return { ok: false, error: "no status mirror directory configured", mirrorDir: null };
+  }
+  const snapshot = input.snapshot !== void 0 ? input.snapshot : input;
+  const envelope = {
+    schema: SCHEMA,
+    updatedAt: input.updatedAt || (/* @__PURE__ */ new Date()).toISOString(),
+    runId: input.runId || extractRunId(snapshot) || null,
+    snapshot
+  };
+  const filePath = path5.join(mirrorDir, MIRROR_FILENAME);
+  try {
+    await fs5.mkdir(mirrorDir, { recursive: true });
+    await writeAtomic(filePath, envelope);
+  } catch (error51) {
+    return { ok: false, error: String(error51 && error51.message ? error51.message : error51), mirrorDir };
+  }
+  return {
+    ok: true,
+    mirrorDir,
+    path: filePath,
+    updatedAt: envelope.updatedAt
+  };
+}
+async function readStatusMirror(options = {}) {
+  const mirrorDir = resolveStatusMirrorDir(options);
+  if (!mirrorDir) return null;
+  const filePath = path5.join(mirrorDir, MIRROR_FILENAME);
+  let text;
+  try {
+    text = await fs5.readFile(filePath, "utf8");
+  } catch {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  if (parsed.snapshot === void 0) {
+    return { ...parsed, schema: parsed.schema || SCHEMA, snapshot: parsed };
+  }
+  return parsed;
+}
+async function writeAtomic(filePath, value) {
+  await fs5.mkdir(path5.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
+  await fs5.writeFile(tmp, JSON.stringify(value, null, 2) + os4.EOL, "utf8");
+  try {
+    await fs5.rename(tmp, filePath);
+  } catch (error51) {
+    try {
+      await fs5.unlink(tmp);
+    } catch {
+    }
+    throw error51;
+  }
+}
+function defaultUserDataDir(env) {
+  if (process.platform === "win32") {
+    const local = nonEmptyString(env.LOCALAPPDATA);
+    if (local) return local;
+  }
+  const home = nonEmptyString(env.HOME) || nonEmptyString(env.USERPROFILE);
+  return home ? path5.join(home, ".scp") : os4.homedir() ? path5.join(os4.homedir(), ".scp") : null;
+}
+function extractRunId(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return null;
+  return snapshot.runId || snapshot.summary && snapshot.summary.runId || null;
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+// src/core/status-view.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+var DEFAULT_STALE_MS2 = 12e4;
+var SNIPPET_LIMIT2 = 200;
+var MAX_RECENT_EVENTS2 = 12;
+var MAX_RISKS2 = 8;
+var MAX_NEXT_ACTIONS2 = 10;
+var USEFUL_EVENT_TYPES = /* @__PURE__ */ new Set([
+  "run_started",
+  "run_finished",
+  "phase_started",
+  "phase_finished",
+  "task_started",
+  "task_finished",
+  "task_result",
+  "command_started",
+  "command_finished",
+  "checkpoint",
+  "heartbeat",
+  "blocked",
+  "unblocked"
+]);
+function buildRunViewModel(input, options = {}) {
+  const now = resolveNow2(options.now);
+  const staleMs = Number.isFinite(options.staleMs) ? options.staleMs : DEFAULT_STALE_MS2;
+  const { summary, runtime, mode } = unwrap2(input);
+  if (mode === "status-list") {
+    return buildListViewModel(runtime, { now, staleMs });
+  }
+  const tasks = collectTasks2(summary, runtime);
+  const counts = countTasks2(summary, tasks);
+  const status = resolveStatus2(summary, runtime, counts);
+  const phase = runtime.done === false ? "in_progress" : "final";
+  const taskViewModels = tasks.map((task) => buildTaskViewModel(task));
+  const recentEvents = collectRecentEvents(runtime, summary);
+  const tokenEvidence = summarizeTokenEvidence({ summary, tasks });
+  const health = buildHealth(summary, runtime, counts, { now, staleMs });
+  const activeTasks = collectActive2(runtime);
+  const lastEvent = lastUsefulEvent(recentEvents);
+  const running = status === "running" || phase === "in_progress";
+  const display = buildDisplayFields({
+    status,
+    health,
+    counts,
+    phase,
+    activeTaskCount: activeTasks.length,
+    lastEvent,
+    now,
+    staleMs,
+    running
+  });
+  const out = {
+    schema: "scp.run-view/v1",
+    mode: "run",
+    runId: summary?.runId || runtime.runId || null,
+    runDir: summary?.runDir || runtime.runDir || null,
+    status,
+    phase,
+    displayStatus: display.displayStatus,
+    statusTone: display.statusTone,
+    progressHint: display.progressHint,
+    activeTaskCount: display.activeTaskCount,
+    lastUsefulEventAt: display.lastUsefulEventAt,
+    stalenessMs: display.stalenessMs,
+    counts,
+    tasks: taskViewModels,
+    activeTasks,
+    recentEvents,
+    tokenEvidence,
+    health,
+    artifacts: buildArtifacts2(summary, tasks)
+  };
+  if (summary?.recovered) out.recovered = true;
+  if (summary?.error) out.error = snippet2(String(summary.error), SNIPPET_LIMIT2);
+  if (summary?.dryRun) out.dryRun = true;
+  if (summary?.startedAt) out.startedAt = summary.startedAt;
+  if (summary?.endedAt) out.endedAt = summary.endedAt;
+  return pruneUndefined2(out);
+}
+function buildTaskViewModel(input) {
+  const task = unwrapTask(input);
+  if (!task) {
+    return { schema: "scp.task-view/v1", taskId: null, status: "unknown" };
+  }
+  const parsed = task.parsed || {};
+  const files = Array.isArray(parsed.filesChanged) ? parsed.filesChanged : [];
+  const risks = Array.isArray(parsed.risks) ? parsed.risks : [];
+  const verification = Array.isArray(parsed.verification) ? parsed.verification : [];
+  const commands = Array.isArray(parsed.commandsRun) ? parsed.commandsRun : [];
+  const out = {
+    schema: "scp.task-view/v1",
+    taskId: task.id || null,
+    title: task.title || parsed.title || null,
+    status: normalizeTaskStatus(task.status),
+    kind: task.kind || parsed.kind || null,
+    taskDir: task.taskDir || null,
+    resultPath: task.taskDir ? joinPosix(task.taskDir, "result.json") : task.resultPath || null,
+    eventLogPath: task.eventLogPath || (task.taskDir ? joinPosix(task.taskDir, "events.jsonl") : null),
+    startedAt: task.startedAt || null,
+    endedAt: task.endedAt || null,
+    durationMs: typeof task.durationMs === "number" && Number.isFinite(task.durationMs) ? task.durationMs : void 0,
+    filesChanged: files.map(normalizeFileChange).filter(Boolean),
+    risks: risks.slice(0, MAX_RISKS2).map(normalizeRisk).filter(Boolean),
+    verification: verification.map(normalizeVerification3).filter(Boolean),
+    commandsRun: commands.map(normalizeCommand).filter(Boolean),
+    nextSteps: collectNextSteps(parsed.nextSteps),
+    tokenEvidence: summarizeTokenEvidence(task),
+    blocked: task.blocked || parsed.blocked || void 0,
+    error: task.error || parsed.error ? snippet2(String(task.error || parsed.error), SNIPPET_LIMIT2) : void 0
+  };
+  return pruneUndefined2(out);
+}
+function buildEventViewModel(input) {
+  const event = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const ts = event.timestamp || event.ts || null;
+  const out = {
+    schema: "scp.event-view/v1",
+    type: event.type || null,
+    timestamp: ts,
+    runId: event.runId || null,
+    taskId: event.taskId || null,
+    phase: event.phase || null,
+    label: event.label || null,
+    summary: event.summary ? snippet2(String(event.summary), SNIPPET_LIMIT2) : null,
+    message: event.message ? snippet2(String(event.message), SNIPPET_LIMIT2) : null,
+    reason: event.reason ? snippet2(String(event.reason), SNIPPET_LIMIT2) : null,
+    status: event.status || null,
+    exitCode: typeof event.exitCode === "number" ? event.exitCode : null,
+    sequence: typeof event.sequence === "number" ? event.sequence : null,
+    durationMs: typeof event.durationMs === "number" && Number.isFinite(event.durationMs) ? event.durationMs : void 0
+  };
+  return pruneUndefined2(out);
+}
+function summarizeTokenEvidence(input) {
+  if (!input || typeof input !== "object") {
+    return { schema: "scp.token-evidence/v1", measured: false };
+  }
+  const tasks = Array.isArray(input.tasks) ? input.tasks : input.parsed || input.usage || input.metrics ? [input] : [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheRead = 0;
+  let cacheCreate = 0;
+  let costUsd = 0;
+  let measured = false;
+  const summaryTotals = input.tokenUsage || input.totals || input.tokenCost || input.summary && input.summary.tokenUsage;
+  if (summaryTotals && typeof summaryTotals === "object") {
+    const sIn = pickNum2(summaryTotals, ["input", "inputTokens", "input_tokens"]);
+    const sOut = pickNum2(summaryTotals, ["output", "outputTokens", "output_tokens"]);
+    const sCr = pickNum2(summaryTotals, ["cacheRead", "cache_read_input_tokens", "cacheReadInputTokens"]);
+    const sCc = pickNum2(summaryTotals, ["cacheCreate", "cache_creation_input_tokens", "cacheCreationInputTokens"]);
+    const sCost = pickNum2(summaryTotals, ["costUsd", "cost_usd", "cost"]);
+    if (sIn != null) {
+      inputTokens += sIn;
+      measured = true;
+    }
+    if (sOut != null) {
+      outputTokens += sOut;
+      measured = true;
+    }
+    if (sCr != null) {
+      cacheRead += sCr;
+      measured = true;
+    }
+    if (sCc != null) {
+      cacheCreate += sCc;
+      measured = true;
+    }
+    if (sCost != null) {
+      costUsd += sCost;
+      measured = true;
+    }
+  }
+  for (const task of tasks) {
+    const usage = task.usage;
+    if (usage && typeof usage === "object") {
+      const inT = pickNum2(usage, ["input_tokens", "inputTokens", "tokensInput"]);
+      const outT = pickNum2(usage, ["output_tokens", "outputTokens", "tokensOutput"]);
+      const cr = pickNum2(usage, ["cache_read_input_tokens", "cacheReadInputTokens"]);
+      const cc = pickNum2(usage, ["cache_creation_input_tokens", "cacheCreationInputTokens"]);
+      const c = pickNum2(usage, ["cost_usd", "costUsd"]) ?? pickNum2(task, ["costUsd"]) ?? pickNum2(task?.parsed?.metrics, ["costUsd", "cost_usd"]);
+      if (inT != null) {
+        inputTokens += inT;
+        measured = true;
+      }
+      if (outT != null) {
+        outputTokens += outT;
+        measured = true;
+      }
+      if (cr != null) {
+        cacheRead += cr;
+        measured = true;
+      }
+      if (cc != null) {
+        cacheCreate += cc;
+        measured = true;
+      }
+      if (c != null) {
+        costUsd += c;
+        measured = true;
+      }
+    }
+  }
+  const total = measured && (inputTokens || outputTokens || cacheRead || cacheCreate) ? inputTokens + outputTokens + cacheRead + cacheCreate : void 0;
+  return pruneUndefined2({
+    schema: "scp.token-evidence/v1",
+    measured,
+    totals: pruneUndefined2({
+      input: measured && inputTokens ? inputTokens : void 0,
+      output: measured && outputTokens ? outputTokens : void 0,
+      cacheRead: measured && cacheRead ? cacheRead : void 0,
+      cacheCreate: measured && cacheCreate ? cacheCreate : void 0,
+      total,
+      costUsd: measured && costUsd ? Number(costUsd.toFixed(6)) : void 0
+    }),
+    note: measured ? "Aggregated measured usage from CLI envelopes; never self-reported estimates." : "No measured usage available; subagent self-report not trusted."
+  });
+}
+function unwrap2(payload) {
+  if (!payload || typeof payload !== "object") {
+    return { summary: null, runtime: {}, mode: "unknown" };
+  }
+  if (payload.mode === "list") {
+    return {
+      summary: null,
+      runtime: {
+        mode: "list",
+        outputDir: payload.outputDir,
+        runs: Array.isArray(payload.runs) ? payload.runs : [],
+        active: payload.active,
+        statusEvents: payload.statusEvents
+      },
+      mode: "status-list"
+    };
+  }
+  if (payload.mode === "single" || Object.prototype.hasOwnProperty.call(payload, "done")) {
+    return {
+      summary: payload.summary || payload.runSummary || null,
+      runtime: {
+        done: payload.done,
+        status: payload.status,
+        mode: payload.mode,
+        runId: payload.runId,
+        runDir: payload.runDir,
+        active: payload.active,
+        recentEvents: payload.recentEvents,
+        taskEvents: payload.taskEvents,
+        results: payload.results
+      },
+      mode: payload.mode === "single" ? "status-single" : "collect"
+    };
+  }
+  if (payload.totalTasks !== void 0 || Array.isArray(payload.tasks) || payload.runId) {
+    return { summary: payload, runtime: {}, mode: "run-summary" };
+  }
+  return { summary: payload, runtime: {}, mode: "unknown" };
+}
+function unwrapTask(input) {
+  if (!input || typeof input !== "object") return null;
+  if (input.parsed || input.usage || input.id || input.taskDir) return input;
+  if (input.task && typeof input.task === "object") return input.task;
+  if (input.result && typeof input.result === "object") return input.result;
+  return input;
+}
+function collectTasks2(summary, runtime) {
+  const fromSummary = summary && Array.isArray(summary.tasks) ? summary.tasks : [];
+  const fromResults = !fromSummary.length && Array.isArray(runtime.results) ? runtime.results : [];
+  const candidates = fromSummary.length ? fromSummary : fromResults;
+  return candidates.filter((task) => task && typeof task === "object" && (task.id || task.taskDir));
+}
+function countTasks2(summary, tasks) {
+  const empty = { total: 0, completed: 0, partial: 0, blocked: 0, failed: 0, skipped: 0, cancelled: 0, timedOut: 0 };
+  if (summary && typeof summary.totalTasks === "number") {
+    return {
+      total: summary.totalTasks,
+      completed: num2(summary.completedTasks),
+      partial: num2(summary.partialTasks),
+      blocked: num2(summary.blockedTasks),
+      failed: num2(summary.failedTasks),
+      skipped: num2(summary.skippedTasks),
+      cancelled: num2(summary.cancelledTasks),
+      timedOut: num2(summary.timedOutTasks)
+    };
+  }
+  for (const task of tasks) {
+    empty[statusKey2(task.status)] += 1;
+    empty.total += 1;
+  }
+  return empty;
+}
+function resolveStatus2(summary, runtime, counts) {
+  if (runtime && typeof runtime.status === "string" && runtime.status !== "running") {
+    return normalizeRunStatus(runtime.status);
+  }
+  if (runtime?.done === false) return "running";
+  if (summary && typeof summary.status === "string") return normalizeRunStatus(summary.status);
+  if (summary?.error) return "failed";
+  if (counts.cancelled > 0) return "cancelled";
+  if (counts.failed > 0 || counts.timedOut > 0) return "failed";
+  if (counts.blocked > 0) return "blocked";
+  if (counts.total > 0 && counts.completed + counts.partial >= counts.total) return "completed";
+  if (counts.total > 0) return "partial";
+  return "unknown";
+}
+function buildHealth(summary, runtime, counts, { now, staleMs }) {
+  const failed = counts.failed + counts.timedOut;
+  const running = runtime?.done === false || summary && !summary.endedAt && counts.total > 0 && counts.completed + counts.partial < counts.total;
+  const active = Array.isArray(runtime?.active) ? runtime.active : [];
+  const staleCount = countStale(active, runtime?.taskEvents, { now, staleMs });
+  let level;
+  if (failed > 0) level = "error";
+  else if (counts.blocked > 0 || staleCount > 0) level = "warning";
+  else if (running) level = "running";
+  else if (counts.total > 0 && counts.completed + counts.partial >= counts.total) level = "ok";
+  else level = "unknown";
+  return pruneUndefined2({
+    level,
+    running: Boolean(running) || void 0,
+    activeCount: active.length || void 0,
+    staleCount: staleCount || void 0,
+    failedCount: failed || void 0,
+    blockedCount: counts.blocked || void 0
+  });
+}
+function countStale(active, taskEvents, { now, staleMs }) {
+  if (!Array.isArray(active) || !active.length) return 0;
+  const eventMap = /* @__PURE__ */ new Map();
+  if (Array.isArray(taskEvents)) {
+    for (const entry of taskEvents) {
+      if (entry && entry.taskId) eventMap.set(entry.taskId, entry);
+    }
+  }
+  let stale = 0;
+  for (const record2 of active) {
+    if (!record2 || !record2.taskId) continue;
+    const events = eventMap.get(record2.taskId) || {};
+    const reference = events.lastHeartbeatAt || events.lastEventAt || record2.lastHeartbeatAt || record2.lastEventAt;
+    if (!reference) {
+      stale += 1;
+      continue;
+    }
+    const ageMs = now() - Date.parse(reference);
+    if (Number.isFinite(ageMs) && ageMs > staleMs) stale += 1;
+  }
+  return stale;
+}
+function collectActive2(runtime) {
+  if (!Array.isArray(runtime?.active)) return [];
+  return runtime.active.filter((record2) => record2 && record2.taskId).map((record2) => pruneUndefined2({
+    taskId: record2.taskId,
+    title: record2.title || void 0,
+    pid: record2.pid ?? void 0,
+    startedAt: record2.startedAt || void 0,
+    lastEventAt: record2.lastEventAt || void 0,
+    lastHeartbeatAt: record2.lastHeartbeatAt || void 0,
+    phase: record2.phase || void 0,
+    eventLogPath: record2.eventLogPath || void 0
+  }));
+}
+function collectRecentEvents(runtime, summary) {
+  let events = [];
+  if (Array.isArray(runtime?.recentEvents)) events = runtime.recentEvents;
+  if (!events.length && summary && Array.isArray(summary.recentEvents)) events = summary.recentEvents;
+  if (!events.length) return [];
+  return events.slice(-MAX_RECENT_EVENTS2).map(buildEventViewModel);
+}
+function lastUsefulEvent(recentEvents) {
+  if (!Array.isArray(recentEvents) || !recentEvents.length) return null;
+  let usefulPick = null;
+  let usefulMs = -Infinity;
+  let anyPick = null;
+  let anyMs = -Infinity;
+  for (const ev of recentEvents) {
+    if (!ev || typeof ev !== "object") continue;
+    const ts = ev.timestamp || ev.ts;
+    if (!ts) continue;
+    const ms = Date.parse(ts);
+    if (!Number.isFinite(ms)) continue;
+    if (ms > anyMs) {
+      anyMs = ms;
+      anyPick = { ts, ms };
+    }
+    if (USEFUL_EVENT_TYPES.has(ev.type) && ms > usefulMs) {
+      usefulMs = ms;
+      usefulPick = { ts, ms };
+    }
+  }
+  return usefulPick || anyPick;
+}
+function buildDisplayFields({ status, health, counts, phase, activeTaskCount, lastEvent, now, staleMs, running }) {
+  const stale = isStale(health, lastEvent, now, staleMs, running);
+  return pruneUndefined2({
+    displayStatus: mapDisplayStatus(status, phase, stale),
+    statusTone: mapStatusTone(status, health, stale),
+    progressHint: buildProgressHint(counts, status, activeTaskCount),
+    activeTaskCount: activeTaskCount || 0,
+    lastUsefulEventAt: lastEvent ? lastEvent.ts : null,
+    stalenessMs: computeStalenessMs(lastEvent, now)
+  });
+}
+function isStale(health, lastEvent, now, staleMs, running) {
+  if (health?.staleCount > 0) return true;
+  if (!running || !lastEvent) return false;
+  const age = now() - lastEvent.ms;
+  return Number.isFinite(age) && age > staleMs;
+}
+function mapDisplayStatus(status, phase, stale) {
+  if (stale && (status === "running" || phase === "in_progress")) return "Stale";
+  switch (status) {
+    case "running":
+      return "Running";
+    case "completed":
+      return "Completed";
+    case "failed":
+      return "Failed";
+    case "blocked":
+      return "Blocked";
+    case "cancelled":
+      return "Cancelled";
+    case "partial":
+      return "Partial";
+    case "skipped":
+      return "Skipped";
+    case "list":
+      return "List";
+    default:
+      return "Idle";
+  }
+}
+function mapStatusTone(status, health, stale) {
+  const level = health?.level;
+  if (level === "error" || status === "failed") return "negative";
+  if (stale || level === "warning" || status === "blocked") return "warning";
+  if (status === "running" || level === "running") return "active";
+  if (status === "completed" || level === "ok") return "positive";
+  return "neutral";
+}
+function buildProgressHint(counts, status, activeTaskCount) {
+  const total = counts?.total || 0;
+  const done = (counts?.completed || 0) + (counts?.partial || 0);
+  const failed = (counts?.failed || 0) + (counts?.timedOut || 0);
+  if (total > 0) {
+    const parts = [`${done}/${total} tasks`];
+    if (failed > 0) parts.push(`${failed} failed`);
+    if (status === "running" && activeTaskCount > 0) parts.push(`${activeTaskCount} active`);
+    return parts.join(", ");
+  }
+  if (status === "running") return activeTaskCount > 0 ? `${activeTaskCount} active` : "Running";
+  return null;
+}
+function computeStalenessMs(lastEvent, now) {
+  if (!lastEvent) return null;
+  const age = now() - lastEvent.ms;
+  return Number.isFinite(age) && age >= 0 ? Math.round(age) : null;
+}
+function computeListStaleness(activeTasks, now) {
+  if (!Array.isArray(activeTasks) || !activeTasks.length) return null;
+  let maxAge = null;
+  for (const task of activeTasks) {
+    const ref = task?.lastHeartbeatAt || task?.lastEventAt || task?.startedAt;
+    if (!ref) continue;
+    const ms = Date.parse(ref);
+    if (!Number.isFinite(ms)) continue;
+    const age = now() - ms;
+    if (Number.isFinite(age) && age >= 0 && (maxAge === null || age > maxAge)) maxAge = age;
+  }
+  return maxAge === null ? null : Math.round(maxAge);
+}
+function buildArtifacts2(summary, tasks) {
+  const runDir = summary?.runDir || null;
+  const taskArtifacts = tasks.map((task) => pruneUndefined2({
+    taskId: task.id || void 0,
+    taskDir: task.taskDir || void 0,
+    resultPath: task.taskDir ? joinPosix(task.taskDir, "result.json") : task.resultPath || void 0,
+    eventLogPath: task.eventLogPath || (task.taskDir ? joinPosix(task.taskDir, "events.jsonl") : void 0)
+  }));
+  return pruneUndefined2({
+    runDir,
+    runSummaryPath: runDir ? joinPosix(runDir, "run-summary.json") : void 0,
+    runInputPath: runDir ? joinPosix(runDir, "run-input.json") : void 0,
+    tasks: taskArtifacts
+  });
+}
+function buildListViewModel(runtime, { now, staleMs }) {
+  const runs = (runtime.runs || []).map((run) => {
+    if (!run || typeof run !== "object") return null;
+    if (run.status === "incomplete_or_unreadable") {
+      return { runDir: run.runDir || null, status: "unknown", sourceStatus: "incomplete_or_unreadable" };
+    }
+    return pruneUndefined2({
+      runId: run.runId || (run.runDir ? basename(run.runDir) : void 0),
+      runDir: run.runDir || void 0,
+      status: deriveRunStatusLite2(run),
+      startedAt: run.startedAt || void 0,
+      endedAt: run.endedAt || void 0,
+      totalTasks: run.totalTasks ?? void 0,
+      completedTasks: run.completedTasks ?? void 0,
+      failedTasks: run.failedTasks ?? void 0,
+      blockedTasks: run.blockedTasks ?? void 0
+    });
+  }).filter(Boolean);
+  const activeTasks = collectActive2(runtime);
+  const activeTaskCount = activeTasks.length;
+  const staleCount = countStale(activeTasks, [], { now, staleMs });
+  const stalenessMs = computeListStaleness(activeTasks, now);
+  const health = buildListHealth(activeTaskCount, staleCount, runs.length);
+  return pruneUndefined2({
+    schema: "scp.run-view/v1",
+    mode: "list",
+    status: "list",
+    phase: "list",
+    displayStatus: "List",
+    statusTone: staleCount > 0 ? "warning" : activeTaskCount > 0 ? "active" : "neutral",
+    progressHint: `${runs.length} run${runs.length === 1 ? "" : "s"}${activeTaskCount ? `, ${activeTaskCount} active` : ""}`,
+    activeTaskCount,
+    lastUsefulEventAt: null,
+    stalenessMs,
+    outputDir: runtime.outputDir || null,
+    runs,
+    activeTasks,
+    health,
+    counts: { total: runs.length }
+  });
+}
+function deriveRunStatusLite2(run) {
+  if (typeof run.status === "string") return normalizeRunStatus(run.status);
+  if (run.error) return "failed";
+  if (num2(run.failedTasks) || num2(run.timedOutTasks)) return "failed";
+  if (num2(run.blockedTasks)) return "blocked";
+  if (num2(run.cancelledTasks)) return "cancelled";
+  const total = num2(run.totalTasks);
+  if (total > 0 && num2(run.completedTasks) + num2(run.partialTasks) >= total) return "completed";
+  if (total > 0) return "running";
+  return "unknown";
+}
+function buildListHealth(activeTaskCount, staleCount, runCount) {
+  let level = "unknown";
+  if (staleCount > 0) level = "warning";
+  else if (activeTaskCount > 0) level = "running";
+  else if (runCount > 0) level = "ok";
+  return pruneUndefined2({
+    level,
+    running: activeTaskCount > 0 || void 0,
+    activeCount: activeTaskCount || void 0,
+    staleCount: staleCount || void 0
+  });
+}
+function resolveNow2(now) {
+  if (typeof now === "function") return now;
+  if (typeof now === "string") {
+    const parsed = Date.parse(now);
+    if (Number.isFinite(parsed)) return () => parsed;
+  }
+  if (typeof now === "number" && Number.isFinite(now)) return () => now;
+  return () => Date.now();
+}
+function normalizeTaskStatus(status) {
+  const text = String(status || "").toLowerCase();
+  if (!text) return "unknown";
+  if (["completed", "partial", "blocked", "failed", "skipped", "cancelled", "running", "pending"].includes(text)) return text;
+  if (text === "timed_out" || text === "timedout") return "timedOut";
+  return text;
+}
+function normalizeRunStatus(status) {
+  const text = String(status || "").toLowerCase();
+  if (!text) return "unknown";
+  if (["running", "completed", "partial", "blocked", "failed", "skipped", "cancelled", "unknown", "list"].includes(text)) return text;
+  if (text === "pending" || text === "queued") return "running";
+  if (text === "timed_out" || text === "timedout" || text === "timeout") return "failed";
+  if (text === "incomplete_or_unreadable" || text === "incomplete" || text === "unreadable") return "unknown";
+  return "unknown";
+}
+function normalizeFileChange(file2) {
+  if (!file2 || typeof file2 !== "object") return null;
+  const filePath = String(file2.path || file2.file || "").trim();
+  if (!filePath) return null;
+  return pruneUndefined2({
+    path: filePath,
+    change: file2.change ? String(file2.change) : void 0
+  });
+}
+function normalizeRisk(risk) {
+  if (!risk || typeof risk !== "object") return null;
+  const text = String(risk.risk || risk.description || "").trim();
+  if (!text) return null;
+  return pruneUndefined2({
+    risk: snippet2(text, SNIPPET_LIMIT2),
+    severity: ["high", "medium", "low"].includes(risk.severity) ? risk.severity : "low",
+    mitigation: risk.mitigation ? snippet2(String(risk.mitigation), SNIPPET_LIMIT2) : void 0
+  });
+}
+function normalizeVerification3(item) {
+  if (!item || typeof item !== "object") return null;
+  const label = item.check || item.command || item.name || "";
+  if (!label) return null;
+  return pruneUndefined2({
+    check: redactForDisplay(label),
+    status: mapCheckStatus4(item.status),
+    evidence: item.evidence || item.notes || item.detail ? redactForDisplay(item.evidence || item.notes || item.detail) : void 0
+  });
+}
+function normalizeCommand(item) {
+  if (!item || typeof item !== "object") return null;
+  const command = item.command || item.check || item.name || "";
+  if (!command) return null;
+  return pruneUndefined2({
+    label: commandLabel(command),
+    command: redactForDisplay(command),
+    status: mapCheckStatus4(item.status),
+    notes: item.notes ? redactForDisplay(item.notes) : void 0
+  });
+}
+function collectNextSteps(steps) {
+  if (!Array.isArray(steps)) return void 0;
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const step of steps) {
+    const text = snippet2(String(step || "").trim(), SNIPPET_LIMIT2);
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    out.push(text);
+    if (out.length >= MAX_NEXT_ACTIONS2) break;
+  }
+  return out.length ? out : void 0;
+}
+function statusKey2(status) {
+  const text = String(status || "").toLowerCase();
+  if (text === "completed") return "completed";
+  if (text === "partial") return "partial";
+  if (text === "blocked") return "blocked";
+  if (text === "failed") return "failed";
+  if (text === "skipped") return "skipped";
+  if (text === "cancelled") return "cancelled";
+  if (text === "timed_out" || text === "timedout") return "timedOut";
+  if (text === "running" || text === "pending") return "partial";
+  return "partial";
+}
+function mapCheckStatus4(status) {
+  const text = String(status || "").toLowerCase();
+  if (["passed", "pass", "success", "succeeded", "ok", "completed"].includes(text)) return "passed";
+  if (["failed", "fail", "error"].includes(text)) return "failed";
+  if (["skipped", "skip"].includes(text)) return "skipped";
+  return "notRun";
+}
+function num2(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+function pickNum2(obj, keys) {
+  if (!obj || typeof obj !== "object") return void 0;
+  for (const key of keys) {
+    if (typeof obj[key] === "number" && Number.isFinite(obj[key])) return obj[key];
+  }
+  return void 0;
+}
+function snippet2(text, limit) {
+  const value = String(text == null ? "" : text).trim().replace(/\s+/g, " ");
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit - 3)}...`;
+}
+var SECRET_PAIR_RE = /([A-Za-z0-9_\-]*(?:secret|password|passwd|pwd|token|api[-_]?key|auth|credential|private[-_]?key)[A-Za-z0-9_\-]*)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s;&|]+)/gi;
+var BEARER_RE = /\b(bearer)\s+[A-Za-z0-9._\-+/=]+/gi;
+function redactForDisplay(text, limit = SNIPPET_LIMIT2) {
+  let out = String(text == null ? "" : text);
+  out = out.replace(SECRET_PAIR_RE, "$1=***");
+  out = out.replace(BEARER_RE, "$1 ***");
+  return snippet2(out, limit);
+}
+function commandLabel(command) {
+  const text = String(command == null ? "" : command).trim().replace(/\s+/g, " ");
+  if (!text) return null;
+  const tokens = text.split(" ").filter(Boolean);
+  let i = 0;
+  while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) i += 1;
+  const prog = tokens[i] || tokens[0] || "";
+  return redactForDisplay(prog, 80);
+}
+function joinPosix(dir, name) {
+  if (!dir) return null;
+  const sep = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
+  return `${dir.replace(/[\\/]+$/, "")}${sep}${name}`;
+}
+function basename(dir) {
+  if (!dir) return null;
+  const cleaned = String(dir).replace(/[\\/]+$/, "");
+  const match = cleaned.match(/[\\/]?([^\\/]+)$/);
+  return match ? match[1] : cleaned;
+}
+function pruneUndefined2(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return value;
+  const out = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (val === void 0) continue;
+    out[key] = val;
+  }
+  return out;
+}
+
+// src/core/run-registry.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+import fs6 from "node:fs/promises";
+import os5 from "node:os";
+import path6 from "node:path";
 var REGISTRY_FILENAME = ".scp-run-registry.json";
 var DEFAULT_STALE_AFTER_MS = 5 * 60 * 1e3;
 function hasEnded(summary) {
@@ -33680,10 +34572,10 @@ function deriveRunStatus(summary) {
   return "running";
 }
 function emptyRegistry(outputDir) {
-  return { version: 1, outputDir: path5.resolve(outputDir), updatedAt: null, runs: {} };
+  return { version: 1, outputDir: path6.resolve(outputDir), updatedAt: null, runs: {} };
 }
 function registryPath(outputDir) {
-  return path5.join(path5.resolve(outputDir), REGISTRY_FILENAME);
+  return path6.join(path6.resolve(outputDir), REGISTRY_FILENAME);
 }
 async function readRunRegistry(outputDir) {
   const filePath = registryPath(outputDir);
@@ -33699,27 +34591,27 @@ async function readRunRegistry(outputDir) {
   const runs = parsed.runs && typeof parsed.runs === "object" && !Array.isArray(parsed.runs) ? parsed.runs : {};
   return {
     version: 1,
-    outputDir: path5.resolve(outputDir),
+    outputDir: path6.resolve(outputDir),
     updatedAt: parsed.updatedAt || null,
     runs
   };
 }
 async function writeRegistryAtomic(outputDir, registry2) {
   const filePath = registryPath(outputDir);
-  await fs5.mkdir(path5.dirname(filePath), { recursive: true });
+  await fs6.mkdir(path6.dirname(filePath), { recursive: true });
   const payload = {
     version: 1,
-    outputDir: path5.resolve(outputDir),
+    outputDir: path6.resolve(outputDir),
     updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
     runs: registry2.runs || {}
   };
   const tmp = `${filePath}.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
-  await fs5.writeFile(tmp, JSON.stringify(payload, null, 2) + os4.EOL, "utf8");
+  await fs6.writeFile(tmp, JSON.stringify(payload, null, 2) + os5.EOL, "utf8");
   try {
-    await fs5.rename(tmp, filePath);
+    await fs6.rename(tmp, filePath);
   } catch (error51) {
     try {
-      await fs5.unlink(tmp);
+      await fs6.unlink(tmp);
     } catch {
     }
     throw error51;
@@ -33759,7 +34651,7 @@ async function resolveRunDirFromRegistry(outputDir, runId) {
 async function readEventsFile(eventsPath) {
   let text;
   try {
-    text = await fs5.readFile(eventsPath, "utf8");
+    text = await fs6.readFile(eventsPath, "utf8");
   } catch {
     return [];
   }
@@ -33784,16 +34676,16 @@ async function collectTaskEntries(summary, runDir) {
     }
   }
   if (entries.length === 0 && runDir) {
-    const tasksDir = path5.join(runDir, "tasks");
+    const tasksDir = path6.join(runDir, "tasks");
     let names = [];
     try {
-      names = await fs5.readdir(tasksDir, { withFileTypes: true });
+      names = await fs6.readdir(tasksDir, { withFileTypes: true });
     } catch {
       return entries;
     }
     for (const ent of names) {
       if (!ent.isDirectory()) continue;
-      entries.push({ id: ent.name, taskDir: path5.join(tasksDir, ent.name), eventLogPath: null });
+      entries.push({ id: ent.name, taskDir: path6.join(tasksDir, ent.name), eventLogPath: null });
     }
   }
   return entries;
@@ -33805,7 +34697,7 @@ async function latestHeartbeat(runDir, summary) {
   const entries = await collectTaskEntries(summary, runDir);
   let latest = null;
   for (const entry of entries) {
-    const eventsPath = entry.eventLogPath || (entry.taskDir ? path5.join(entry.taskDir, "events.jsonl") : null);
+    const eventsPath = entry.eventLogPath || (entry.taskDir ? path6.join(entry.taskDir, "events.jsonl") : null);
     if (!eventsPath) continue;
     const events = await readEventsFile(eventsPath);
     for (const event of events) {
@@ -33821,7 +34713,7 @@ async function allTaskResultsPresent(runDir, input) {
   for (const task of tasks) {
     if (!task?.id) return false;
     try {
-      await fs5.access(path5.join(runDir, "tasks", task.id, "result.json"));
+      await fs6.access(path6.join(runDir, "tasks", task.id, "result.json"));
     } catch {
       return false;
     }
@@ -33832,12 +34724,12 @@ async function gatherRunState(runDir) {
   let input = null;
   let summary = null;
   try {
-    input = await readJson(path5.join(runDir, "run-input.json"));
+    input = await readJson(path6.join(runDir, "run-input.json"));
   } catch {
     input = null;
   }
   try {
-    summary = await readJson(path5.join(runDir, "run-summary.json"));
+    summary = await readJson(path6.join(runDir, "run-summary.json"));
   } catch {
     summary = null;
   }
@@ -33860,12 +34752,12 @@ function classifyRun(state, options = {}) {
   return state.allResultsPresent ? "recovered" : "orphaned";
 }
 async function recoverRunsFromOutputDir(outputDir, options = {}) {
-  const resolved = path5.resolve(outputDir);
+  const resolved = path6.resolve(outputDir);
   const staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
   const now = options.now ?? Date.now();
   let entries = [];
   try {
-    entries = await fs5.readdir(resolved, { withFileTypes: true });
+    entries = await fs6.readdir(resolved, { withFileTypes: true });
   } catch {
     return {
       outputDir: resolved,
@@ -33879,7 +34771,7 @@ async function recoverRunsFromOutputDir(outputDir, options = {}) {
   const registry2 = emptyRegistry(resolved);
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const runDir = path5.join(resolved, entry.name);
+    const runDir = path6.join(resolved, entry.name);
     const state = await gatherRunState(runDir);
     if (!state.summary && !state.input) continue;
     const allResultsPresent = await allTaskResultsPresent(runDir, state.input);
@@ -33919,8 +34811,8 @@ async function recoverRunsFromOutputDir(outputDir, options = {}) {
 }
 
 // src/core/scheduler.mjs
-var packageRoot = path6.resolve(path6.dirname(fileURLToPath(import.meta.url)), "..", "..");
-var resultSchemaPath = path6.join(packageRoot, "schemas", "agent-result.schema.json");
+var packageRoot = path7.resolve(path7.dirname(fileURLToPath(import.meta.url)), "..", "..");
+var resultSchemaPath = path7.join(packageRoot, "schemas", "agent-result.schema.json");
 var activeRuns = /* @__PURE__ */ new Map();
 var retainedRuns = /* @__PURE__ */ new Map();
 var RETAINED_RUN_LIMIT = 100;
@@ -33935,11 +34827,11 @@ async function runTaskPlan(plan, options = {}) {
 }
 async function prepareRun(plan, options = {}) {
   assertPlanShape(plan);
-  const planDir = path6.resolve(options.planDir || process.cwd());
-  const workspace = path6.resolve(planDir, String(options.workspace || plan.workspace || "."));
-  const outputDir = path6.resolve(
+  const planDir = path7.resolve(options.planDir || process.cwd());
+  const workspace = path7.resolve(planDir, String(options.workspace || plan.workspace || "."));
+  const outputDir = path7.resolve(
     planDir,
-    String(options.outputDir || plan.outputDir || path6.join(workspace, ".subagent-runs"))
+    String(options.outputDir || plan.outputDir || path7.join(workspace, ".subagent-runs"))
   );
   const concurrency = Number(options.concurrency || plan.concurrency || 1);
   const dryRun = Boolean(options.dryRun || plan.dryRun);
@@ -33947,7 +34839,7 @@ async function prepareRun(plan, options = {}) {
     throw new Error("concurrency must be a positive integer");
   }
   const runId = options.runId || createRunId();
-  const runDir = path6.join(outputDir, runId);
+  const runDir = path7.join(outputDir, runId);
   const startedAt = (/* @__PURE__ */ new Date()).toISOString();
   const schema = options.schema || define_SCP_RESULT_SCHEMA_INLINE_default;
   const claudeExecutable = await resolveClaudeExecutable(
@@ -33959,8 +34851,8 @@ async function prepareRun(plan, options = {}) {
   );
   const tasks = plan.tasks.map((task) => normalizeTask(task, plan.defaults || {}, workspace, planDir));
   validateDependencies(tasks);
-  await fs6.mkdir(path6.join(runDir, "tasks"), { recursive: true });
-  await writeJson(path6.join(runDir, "run-input.json"), {
+  await fs7.mkdir(path7.join(runDir, "tasks"), { recursive: true });
+  await writeJson(path7.join(runDir, "run-input.json"), {
     runId,
     runDir,
     outputDir,
@@ -34020,7 +34912,7 @@ async function executeRun(scheduler, tasks) {
   const endedAt = (/* @__PURE__ */ new Date()).toISOString();
   const summary = summarizeRun({ ...scheduler, endedAt }, tasks, results);
   attachOwnershipValidation(summary, tasks, results, scheduler.workspace);
-  await writeJson(path6.join(scheduler.runDir, "run-summary.json"), summary);
+  await writeJson(path7.join(scheduler.runDir, "run-summary.json"), summary);
   await markRunRegistryEntry(scheduler.outputDir, scheduler.runId, deriveRunStatus2(summary), {
     runDir: scheduler.runDir,
     endedAt
@@ -34063,7 +34955,7 @@ async function startTaskPlan(plan, options = {}) {
 }
 async function collectRun(input = {}) {
   const runId = input.runId;
-  let runDir = input.runDir ? path6.resolve(input.runDir) : null;
+  let runDir = input.runDir ? path7.resolve(input.runDir) : null;
   if (!runDir && runId) {
     const record2 = activeRuns.get(runId);
     if (record2?.runDir) runDir = record2.runDir;
@@ -34073,24 +34965,24 @@ async function collectRun(input = {}) {
     if (record2?.runDir) runDir = record2.runDir;
   }
   if (!runDir && runId && input.outputDir) {
-    runDir = await resolveRunDirFromRegistry(path6.resolve(input.outputDir), runId).catch(() => null);
+    runDir = await resolveRunDirFromRegistry(path7.resolve(input.outputDir), runId).catch(() => null);
   }
   if (!runDir && runId && input.outputDir) {
-    const candidateRunDir = path6.join(path6.resolve(input.outputDir), runId);
+    const candidateRunDir = path7.join(path7.resolve(input.outputDir), runId);
     try {
-      await fs6.access(candidateRunDir);
+      await fs7.access(candidateRunDir);
       runDir = candidateRunDir;
     } catch {
       runDir = null;
     }
   }
   if (!runDir && runId) {
-    const defaultOutputDir = input.outputDir || path6.join(path6.resolve(input.workspace || process.cwd()), ".subagent-runs");
-    const defaultRunDir = path6.join(path6.resolve(defaultOutputDir), runId);
+    const defaultOutputDir = input.outputDir || path7.join(path7.resolve(input.workspace || process.cwd()), ".subagent-runs");
+    const defaultRunDir = path7.join(path7.resolve(defaultOutputDir), runId);
     try {
-      runDir = await resolveRunDirFromRegistry(path6.resolve(defaultOutputDir), runId).catch(() => null);
+      runDir = await resolveRunDirFromRegistry(path7.resolve(defaultOutputDir), runId).catch(() => null);
       if (runDir) throw new Error("__resolved_from_registry__");
-      await fs6.access(defaultRunDir);
+      await fs7.access(defaultRunDir);
       runDir = defaultRunDir;
     } catch (error51) {
       if (error51?.message === "__resolved_from_registry__") {
@@ -34102,8 +34994,8 @@ async function collectRun(input = {}) {
   if (!runDir) {
     throw new Error("collectRun requires runDir, an active runId, or outputDir with runId");
   }
-  const resolvedRunId = runId || path6.basename(runDir);
-  const summaryPath = path6.join(runDir, "run-summary.json");
+  const resolvedRunId = runId || path7.basename(runDir);
+  const summaryPath = path7.join(runDir, "run-summary.json");
   let summary = null;
   try {
     summary = await readJson(summaryPath);
@@ -34171,6 +35063,94 @@ async function watchRun(input = {}) {
   }
   return input.compact || input.healthOnly ? compactWatchPayload(payload, input) : payload;
 }
+async function loadDesktopStatus(input = {}) {
+  if (input.readMirror === true && !input.runId && !input.runDir && !input.outputDir) {
+    const mirror = await readStatusMirror(input);
+    const mirrorView = mirror?.snapshot || null;
+    return {
+      source: "mirror",
+      mirror,
+      mirrorDir: resolveStatusMirrorDir(input),
+      view: mirrorView,
+      schema: mirrorView?.schema || null,
+      // The mirror snapshot is a previously redacted RunViewModel, so a present
+      // view always means a redacted, display-safe payload.
+      redacted: Boolean(mirrorView)
+    };
+  }
+  const statusPayload = input.runId ? await collectRun({
+    runId: input.runId,
+    runDir: input.runDir,
+    workspace: input.workspace,
+    outputDir: input.outputDir,
+    recentEventsLimit: input.recentEventsLimit,
+    staleHeartbeatMs: input.staleHeartbeatMs,
+    slowEventMs: input.slowEventMs,
+    includeControllerSummary: false
+  }) : await loadRunStatus({
+    runDir: input.runDir,
+    outputDir: input.outputDir,
+    limit: input.limit,
+    recentEventsLimit: input.recentEventsLimit,
+    staleHeartbeatMs: input.staleHeartbeatMs,
+    slowEventMs: input.slowEventMs,
+    includeControllerSummary: false
+  });
+  const view = buildRunViewModel(statusPayload, {
+    staleMs: input.staleHeartbeatMs
+  });
+  const result = {
+    source: input.runId || input.runDir ? "run" : "list",
+    view,
+    mirrorDir: resolveStatusMirrorDir(input),
+    // Surface the view-model schema tag and the fact that the view is always
+    // redacted (buildRunViewModel never places raw prompts/stdout/env/full
+    // command bodies; command/verification snippets pass through redactForDisplay).
+    // This lets desktop consumers assert the contract without inspecting `view`.
+    schema: view?.schema || null,
+    redacted: Boolean(view)
+  };
+  if (input.includeRaw === true) {
+    result.raw = statusPayload;
+  }
+  if (input.writeMirror === true) {
+    result.mirror = await writeStatusMirror({
+      ...input,
+      runId: view?.runId,
+      snapshot: view
+    });
+  } else if (input.readMirror === true) {
+    result.mirror = await readStatusMirror(input);
+  }
+  return result;
+}
+function filterIncrementalEvents(events, options = {}) {
+  if (!Array.isArray(events)) return [];
+  let filtered = events;
+  const afterSequence = options.afterSequence;
+  if (typeof afterSequence === "number" && Number.isFinite(afterSequence)) {
+    filtered = filtered.filter(
+      (event) => typeof event?.sequence === "number" && event.sequence > afterSequence
+    );
+  }
+  const since = options.since;
+  if (typeof since === "string" && since.length) {
+    const sinceMs = Date.parse(since);
+    if (Number.isFinite(sinceMs)) {
+      filtered = filtered.filter((event) => {
+        const ts = event?.timestamp || event?.ts;
+        if (!ts) return false;
+        const ms = Date.parse(ts);
+        return Number.isFinite(ms) && ms >= sinceMs;
+      });
+    }
+  }
+  const limit = options.limit;
+  if (typeof limit === "number" && Number.isFinite(limit) && limit >= 0) {
+    filtered = filtered.slice(-Math.floor(limit));
+  }
+  return filtered;
+}
 function retainRunHandle(record2) {
   if (!record2?.runId || !record2?.runDir) return;
   retainedRuns.set(record2.runId, {
@@ -34189,7 +35169,7 @@ function retainRunHandle(record2) {
 async function recoverSummaryFromTaskResults(runDir) {
   let input;
   try {
-    input = await readJson(path6.join(runDir, "run-input.json"));
+    input = await readJson(path7.join(runDir, "run-input.json"));
   } catch {
     return null;
   }
@@ -34198,7 +35178,7 @@ async function recoverSummaryFromTaskResults(runDir) {
   const results = [];
   for (const task of tasks) {
     try {
-      results.push(await readJson(path6.join(runDir, "tasks", task.id, "result.json")));
+      results.push(await readJson(path7.join(runDir, "tasks", task.id, "result.json")));
     } catch {
       return null;
     }
@@ -34206,7 +35186,7 @@ async function recoverSummaryFromTaskResults(runDir) {
   const endedAt = (/* @__PURE__ */ new Date()).toISOString();
   const summary = summarizeRun(
     {
-      runId: input.runId || path6.basename(runDir),
+      runId: input.runId || path7.basename(runDir),
       runDir,
       startedAt: input.startedAt,
       endedAt,
@@ -34241,7 +35221,7 @@ async function writeFailureSummary(scheduler, tasks, error51) {
   summary.error = error51?.stack || String(error51);
   summary.endedAt = endedAt;
   attachOwnershipValidation(summary, tasks, results, scheduler.workspace);
-  await writeJson(path6.join(scheduler.runDir, "run-summary.json"), summary);
+  await writeJson(path7.join(scheduler.runDir, "run-summary.json"), summary);
   await markRunRegistryEntry(scheduler.outputDir, scheduler.runId, "failed", {
     runDir: scheduler.runDir,
     endedAt
@@ -34254,9 +35234,9 @@ async function collectPersistedTaskResults(runDir, tasks, scheduler) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const results = [];
   for (const task of tasks) {
-    const taskDir = path6.join(runDir, "tasks", task.id);
+    const taskDir = path7.join(runDir, "tasks", task.id);
     try {
-      results.push(await readJson(path6.join(taskDir, "result.json")));
+      results.push(await readJson(path7.join(taskDir, "result.json")));
     } catch {
       results.push({
         id: task.id,
@@ -34274,15 +35254,15 @@ async function collectPersistedTaskResults(runDir, tasks, scheduler) {
 var DEFAULT_RECENT_EVENTS_LIMIT = 20;
 async function loadRunStatus({ runDir, outputDir, limit = 20, recentEventsLimit, staleHeartbeatMs, slowEventMs, includeControllerSummary } = {}) {
   if (runDir) {
-    const resolved = path6.resolve(runDir);
-    const summaryPath = path6.join(resolved, "run-summary.json");
+    const resolved = path7.resolve(runDir);
+    const summaryPath = path7.join(resolved, "run-summary.json");
     let summary;
     try {
       summary = await readJson(summaryPath);
     } catch {
       summary = await readRunInputFallback(resolved);
     }
-    const runId = summary?.runId || path6.basename(resolved);
+    const runId = summary?.runId || path7.basename(resolved);
     const eventView = await buildRunEventView(summary, resolved, {
       recentEventsLimit,
       staleHeartbeatMs,
@@ -34301,19 +35281,19 @@ async function loadRunStatus({ runDir, outputDir, limit = 20, recentEventsLimit,
     }
     return payload;
   }
-  const baseDir = path6.resolve(outputDir || path6.join(process.cwd(), ".subagent-runs"));
+  const baseDir = path7.resolve(outputDir || path7.join(process.cwd(), ".subagent-runs"));
   await recoverRunsFromOutputDir(baseDir).catch(() => null);
   let entries = [];
   try {
-    entries = await fs6.readdir(baseDir, { withFileTypes: true });
+    entries = await fs7.readdir(baseDir, { withFileTypes: true });
   } catch {
     return { mode: "list", outputDir: baseDir, runs: [], active: listActiveProcesses() };
   }
-  const runDirs = entries.filter((entry) => entry.isDirectory()).map((entry) => path6.join(baseDir, entry.name)).sort().reverse().slice(0, limit);
+  const runDirs = entries.filter((entry) => entry.isDirectory()).map((entry) => path7.join(baseDir, entry.name)).sort().reverse().slice(0, limit);
   const runs = [];
   for (const dir of runDirs) {
     try {
-      runs.push(await readJson(path6.join(dir, "run-summary.json")));
+      runs.push(await readJson(path7.join(dir, "run-summary.json")));
     } catch {
       runs.push({ runDir: dir, status: "incomplete_or_unreadable" });
     }
@@ -34329,7 +35309,7 @@ async function loadRunStatus({ runDir, outputDir, limit = 20, recentEventsLimit,
 async function readEventsFile2(eventsPath) {
   let text;
   try {
-    text = await fs6.readFile(eventsPath, "utf8");
+    text = await fs7.readFile(eventsPath, "utf8");
   } catch {
     return { exists: false, events: [] };
   }
@@ -34354,16 +35334,16 @@ async function collectTaskEntries2(summary, runDir) {
     }
   }
   if (entries.length === 0 && runDir) {
-    const tasksDir = path6.join(runDir, "tasks");
+    const tasksDir = path7.join(runDir, "tasks");
     let names = [];
     try {
-      names = await fs6.readdir(tasksDir, { withFileTypes: true });
+      names = await fs7.readdir(tasksDir, { withFileTypes: true });
     } catch {
       return entries;
     }
     for (const ent of names) {
       if (!ent.isDirectory()) continue;
-      entries.push({ id: ent.name, taskDir: path6.join(tasksDir, ent.name), eventLogPath: null });
+      entries.push({ id: ent.name, taskDir: path7.join(tasksDir, ent.name), eventLogPath: null });
     }
   }
   return entries;
@@ -34394,7 +35374,7 @@ async function buildRunEventView(summary, runDir, options = {}) {
     }
   }
   for (const entry of taskEntries) {
-    const eventsPath = entry.eventLogPath || (entry.taskDir ? path6.join(entry.taskDir, "events.jsonl") : null);
+    const eventsPath = entry.eventLogPath || (entry.taskDir ? path7.join(entry.taskDir, "events.jsonl") : null);
     if (!eventsPath) continue;
     const { events } = await readEventsFile2(eventsPath);
     const taskSummaryBase = summarizeTaskEvents(events, eventsPath);
@@ -34421,17 +35401,17 @@ async function buildRunEventView(summary, runDir, options = {}) {
 }
 async function readRunInputFallback(runDir) {
   try {
-    const input = await readJson(path6.join(runDir, "run-input.json"));
+    const input = await readJson(path7.join(runDir, "run-input.json"));
     return {
-      runId: path6.basename(runDir),
+      runId: path7.basename(runDir),
       runDir,
       tasks: (input.tasks || []).map((task) => ({
         id: task.id,
-        taskDir: path6.join(runDir, "tasks", task.id)
+        taskDir: path7.join(runDir, "tasks", task.id)
       }))
     };
   } catch {
-    return { runId: path6.basename(runDir), runDir, tasks: [] };
+    return { runId: path7.basename(runDir), runDir, tasks: [] };
   }
 }
 function countRunsWithEventLogs(runs) {
@@ -34532,7 +35512,7 @@ function normalizeTask(task, defaults, workspace, planDir) {
     throw new Error(`Task ${task.id} must include title and prompt`);
   }
   const merged = { ...defaults, ...task };
-  const addDirs = unique([workspace, ...defaults.addDirs || [], ...task.addDirs || []]).map((dir) => path6.resolve(planDir, dir));
+  const addDirs = unique([workspace, ...defaults.addDirs || [], ...task.addDirs || []]).map((dir) => path7.resolve(planDir, dir));
   const timeoutMs = Number(merged.timeoutMs || 6e5);
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1e3) {
     throw new Error(`Task ${task.id} has invalid timeoutMs: ${merged.timeoutMs} (must be an integer >= 1000)`);
@@ -34633,7 +35613,7 @@ async function runTasks(tasks, scheduler) {
   return results.sort((a, b) => tasks.findIndex((task) => task.id === a.id) - tasks.findIndex((task) => task.id === b.id));
 }
 async function writeSkippedTask(task, scheduler, failedDep) {
-  const taskDir = path6.join(scheduler.runDir, "tasks", task.id);
+  const taskDir = path7.join(scheduler.runDir, "tasks", task.id);
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const result = {
     id: task.id,
@@ -34644,11 +35624,11 @@ async function writeSkippedTask(task, scheduler, failedDep) {
     taskDir,
     reason: `Dependency ${failedDep.id} ended with status ${failedDep.status}`
   };
-  await writeJson(path6.join(taskDir, "result.json"), result);
+  await writeJson(path7.join(taskDir, "result.json"), result);
   return result;
 }
 async function writeCancelledTask(task, scheduler) {
-  const taskDir = path6.join(scheduler.runDir, "tasks", task.id);
+  const taskDir = path7.join(scheduler.runDir, "tasks", task.id);
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const result = {
     id: task.id,
@@ -34659,11 +35639,11 @@ async function writeCancelledTask(task, scheduler) {
     taskDir,
     reason: "Run cancelled before this task started"
   };
-  await writeJson(path6.join(taskDir, "result.json"), result);
+  await writeJson(path7.join(taskDir, "result.json"), result);
   return result;
 }
 async function writeFailedTask(task, scheduler, error51) {
-  const taskDir = path6.join(scheduler.runDir, "tasks", task.id);
+  const taskDir = path7.join(scheduler.runDir, "tasks", task.id);
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const result = {
     id: task.id,
@@ -34674,7 +35654,7 @@ async function writeFailedTask(task, scheduler, error51) {
     taskDir,
     error: error51?.stack || String(error51)
   };
-  await writeJson(path6.join(taskDir, "result.json"), result);
+  await writeJson(path7.join(taskDir, "result.json"), result);
   return result;
 }
 function summarizeRun(scheduler, tasks, results) {
@@ -34715,6 +35695,383 @@ function firstNonEmptyArray(...values) {
   return values.find((value) => Array.isArray(value) && value.length > 0) || [];
 }
 
+// src/core/status-bridge.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+import http from "node:http";
+var DEFAULT_HOST = "127.0.0.1";
+var DEFAULT_PORT = 17361;
+var HEARTBEAT_INTERVAL_MS = 15e3;
+var ROUTES = [
+  ["GET", /^\/health\/?$/, handleHealth],
+  ["GET", /^\/runs\/?$/, handleRuns],
+  ["GET", /^\/run\/([^/]+)\/?$/, handleRun],
+  ["GET", /^\/events\/stream\/?$/, handleEventsStream],
+  ["GET", /^\/events\/?$/, handleEvents]
+];
+function startStatusBridge(input = {}) {
+  const options = normalizeOptions2(input);
+  const providers = options.providers || {};
+  const subscribers = /* @__PURE__ */ new Set();
+  const state = { server: null, closing: false };
+  const stats = { totalConnections: 0 };
+  const startedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const ctx = { subscribers, stats, state };
+  const server2 = http.createServer((req, res) => onRequest(req, res, providers, ctx));
+  return new Promise((resolve, reject) => {
+    server2.once("error", reject);
+    server2.listen(options.port, options.host, () => {
+      server2.removeListener("error", reject);
+      const address = server2.address();
+      const port = typeof address === "object" && address ? address.port : options.port;
+      const handle = {
+        server: server2,
+        host: options.host,
+        port,
+        startedAt,
+        subscribers,
+        stats,
+        // Snapshot of bridge runtime stats for a desktop widget. Returns plain
+        // values only (no live references) so the caller can serialize it.
+        getStats: () => ({
+          startedAt,
+          host: options.host,
+          port,
+          sseClientCount: subscribers.size,
+          totalConnections: stats.totalConnections
+        }),
+        close: () => stopStatusBridge(handle)
+      };
+      state.server = server2;
+      resolve(handle);
+    });
+  });
+}
+function stopStatusBridge(handle) {
+  if (!handle) return Promise.resolve();
+  if (!handle.server) return Promise.resolve();
+  if (handle._closing) return Promise.resolve();
+  handle._closing = true;
+  if (handle.subscribers) {
+    for (const sub of Array.from(handle.subscribers)) {
+      detachSubscriber(handle.subscribers, sub);
+      safeEnd(sub.response);
+    }
+    handle.subscribers.clear();
+  }
+  return new Promise((resolve) => {
+    handle.server.close(() => resolve());
+    handle.server.closeAllConnections?.();
+  });
+}
+function normalizeOptions2(input) {
+  const opts = typeof input === "object" && input !== null ? input : {};
+  const providers = opts.providers && typeof opts.providers === "object" ? opts.providers : null;
+  const host = typeof opts.host === "string" && opts.host.length ? opts.host : DEFAULT_HOST;
+  if (!isLoopbackHost(host) && opts.allowNonLoopback !== true) {
+    throw new Error("status bridge refuses non-loopback host without allowNonLoopback=true");
+  }
+  return {
+    host,
+    port: Number.isInteger(opts.port) ? opts.port : DEFAULT_PORT,
+    allowNonLoopback: opts.allowNonLoopback === true,
+    providers: providers || extractProviders(opts)
+  };
+}
+function isLoopbackHost(host) {
+  const value = String(host || "").trim().toLowerCase();
+  return value === "127.0.0.1" || value === "localhost" || value === "::1" || value === "[::1]";
+}
+function extractProviders(opts) {
+  const names = ["getHealth", "getRuns", "getRun", "getEvents", "subscribe"];
+  const providers = {};
+  let found = false;
+  for (const name of names) {
+    if (typeof opts[name] === "function") {
+      providers[name] = opts[name];
+      found = true;
+    }
+  }
+  return found ? providers : null;
+}
+function onRequest(req, res, providers, ctx) {
+  if (ctx.state.closing) {
+    return sendJson(res, 503, { error: "bridge closing" });
+  }
+  const url2 = safeParseUrl(req.url);
+  for (const [method, regex, handler] of ROUTES) {
+    if (req.method !== method) continue;
+    const match = regex.exec(url2.pathname);
+    if (!match) continue;
+    try {
+      return handler(req, res, providers, ctx, match, url2);
+    } catch (err) {
+      return sendJson(res, 502, { error: shortError(err) });
+    }
+  }
+  sendJson(res, 404, { error: "not found" });
+}
+function handleHealth(req, res, providers) {
+  return callProvider(res, providers, "getHealth", () => []);
+}
+function handleRuns(req, res, providers) {
+  return callProvider(res, providers, "getRuns", () => []);
+}
+function handleRun(req, res, providers, _ctx, match) {
+  const runId = safeDecodeURIComponent(match[1] || "");
+  if (runId === null) return sendJson(res, 400, { error: "malformed runId" });
+  if (!runId) return sendJson(res, 400, { error: "missing runId" });
+  return callProvider(res, providers, "getRun", () => [runId]);
+}
+function handleEvents(req, res, providers, _ctx, _match, url2) {
+  const query = parseQuery(url2.searchParams);
+  return callProvider(res, providers, "getEvents", () => [query]);
+}
+function handleEventsStream(req, res, providers, ctx) {
+  if (typeof providers.subscribe !== "function") {
+    return sendJson(res, 501, { error: "subscribe provider not configured" });
+  }
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no"
+  });
+  res.write(": connected\n\n");
+  const { subscribers, stats } = ctx;
+  const sub = { response: res, heartbeat: null };
+  subscribers.add(sub);
+  stats.totalConnections += 1;
+  sub.heartbeat = setInterval(() => writeSseComment(res, "ping"), HEARTBEAT_INTERVAL_MS);
+  const detach = () => detachSubscriber(subscribers, sub);
+  req.on("close", detach);
+  res.on("close", detach);
+  res.on("error", detach);
+  const listener = (event) => writeSseEvent(res, event);
+  try {
+    const unsub = providers.subscribe(listener);
+    sub.unsubscribe = typeof unsub === "function" ? unsub : null;
+  } catch (err) {
+    writeSseEvent(res, { type: "error", message: shortError(err) });
+    detach();
+  }
+}
+async function callProvider(res, providers, name, argsFn) {
+  const fn = providers && providers[name];
+  if (typeof fn !== "function") {
+    return sendJson(res, 501, { error: `${name} provider not configured` });
+  }
+  let result;
+  try {
+    result = await fn(...argsFn());
+  } catch (err) {
+    return sendJson(res, 502, { error: shortError(err) });
+  }
+  return sendJson(res, 200, result);
+}
+function writeSseEvent(res, event) {
+  const payload = toSafeJson(event);
+  if (payload === null) return;
+  res.write(`data: ${payload}
+
+`);
+}
+function writeSseComment(res, text) {
+  res.write(`: ${text}
+
+`);
+}
+function detachSubscriber(subscribers, sub) {
+  if (!sub) return;
+  if (sub.heartbeat) {
+    clearInterval(sub.heartbeat);
+    sub.heartbeat = null;
+  }
+  if (typeof sub.unsubscribe === "function") {
+    try {
+      sub.unsubscribe();
+    } catch {
+    }
+    sub.unsubscribe = null;
+  }
+  subscribers.delete(sub);
+}
+function sendJson(res, status, body) {
+  const json2 = toSafeJson(body);
+  if (json2 === null) {
+    res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+    res.end('{"error":"internal serialization error"}');
+    return;
+  }
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(json2);
+}
+function safeParseUrl(raw) {
+  try {
+    return new URL(raw, "http://localhost");
+  } catch {
+    return new URL("/", "http://localhost");
+  }
+}
+function parseQuery(searchParams) {
+  const query = {};
+  for (const [key, value] of searchParams.entries()) {
+    if (query[key] === void 0) query[key] = value;
+  }
+  if (query.afterSequence !== void 0) {
+    query.afterSequence = parseInteger(query.afterSequence);
+  }
+  if (query.since !== void 0) {
+    query.since = String(query.since);
+  }
+  return query;
+}
+function parseInteger(value) {
+  if (value === null || value === void 0 || value === "") return null;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) ? n : null;
+}
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+function toSafeJson(value) {
+  try {
+    return JSON.stringify(value === void 0 ? null : value);
+  } catch {
+    try {
+      return JSON.stringify({ error: "unprocessable value" });
+    } catch {
+      return null;
+    }
+  }
+}
+function shortError(err) {
+  if (!err) return "unknown error";
+  const msg = typeof err === "string" ? err : err.message;
+  return typeof msg === "string" && msg.length ? msg : "unknown error";
+}
+function safeEnd(res) {
+  try {
+    res.end();
+  } catch {
+  }
+}
+
+// src/core/bridge-discovery.mjs
+init_define_SCP_RESULT_SCHEMA_INLINE();
+import fs8 from "node:fs/promises";
+import os6 from "node:os";
+import path8 from "node:path";
+var DISCOVERY_FILENAME = "bridge.json";
+var SCHEMA2 = "scp.bridge-discovery/v1";
+var SCHEMA_VERSION = 1;
+function resolveBridgeDiscoveryDir(options = {}) {
+  const env = options.env && typeof options.env === "object" ? options.env : process.env;
+  const explicit = nonEmptyString2(options.discoveryDir) || nonEmptyString2(env.SCP_BRIDGE_DISCOVERY_DIR);
+  if (explicit) return path8.resolve(explicit);
+  const userData = defaultUserDataDir2(env);
+  if (userData) return path8.join(userData, "scp", "bridge");
+  const fallback = nonEmptyString2(options.outputDir) || nonEmptyString2(options.taskDir);
+  return fallback ? path8.resolve(fallback) : null;
+}
+async function writeBridgeDiscovery(input = {}) {
+  const dir = resolveBridgeDiscoveryDir(input);
+  if (!dir) {
+    return { ok: false, error: "no bridge discovery directory configured", dir: null };
+  }
+  const payload = {
+    schemaVersion: SCHEMA_VERSION,
+    schema: SCHEMA2,
+    host: nonEmptyString2(input.host) || null,
+    port: normalizePort(input.port),
+    startedAt: nonEmptyString2(input.startedAt) || null,
+    pid: normalizePid(input.pid),
+    updatedAt: nonEmptyString2(input.updatedAt) || (/* @__PURE__ */ new Date()).toISOString()
+  };
+  if (nonEmptyString2(input.workspace)) payload.workspace = nonEmptyString2(input.workspace);
+  if (nonEmptyString2(input.outputDir)) payload.outputDir = nonEmptyString2(input.outputDir);
+  const filePath = path8.join(dir, DISCOVERY_FILENAME);
+  try {
+    await fs8.mkdir(dir, { recursive: true });
+    await writeAtomic2(filePath, payload);
+  } catch (error51) {
+    return { ok: false, error: String(error51 && error51.message ? error51.message : error51), dir };
+  }
+  return { ok: true, dir, path: filePath, updatedAt: payload.updatedAt };
+}
+async function readBridgeDiscovery(options = {}) {
+  const dir = resolveBridgeDiscoveryDir(options);
+  if (!dir) return null;
+  const filePath = path8.join(dir, DISCOVERY_FILENAME);
+  let text;
+  try {
+    text = await fs8.readFile(filePath, "utf8");
+  } catch {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  return parsed;
+}
+async function removeBridgeDiscovery(options = {}) {
+  const dir = resolveBridgeDiscoveryDir(options);
+  if (!dir) return { ok: true, removed: false, dir: null };
+  const filePath = path8.join(dir, DISCOVERY_FILENAME);
+  try {
+    await fs8.unlink(filePath);
+    return { ok: true, removed: true, dir };
+  } catch (error51) {
+    const code = error51 && error51.code;
+    if (code === "ENOENT") return { ok: true, removed: false, dir };
+    return { ok: false, removed: false, dir, error: String(error51 && error51.message ? error51.message : error51) };
+  }
+}
+async function writeAtomic2(filePath, value) {
+  await fs8.mkdir(path8.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
+  await fs8.writeFile(tmp, JSON.stringify(value, null, 2) + os6.EOL, "utf8");
+  try {
+    await fs8.rename(tmp, filePath);
+  } catch (error51) {
+    try {
+      await fs8.unlink(tmp);
+    } catch {
+    }
+    throw error51;
+  }
+}
+function defaultUserDataDir2(env) {
+  if (process.platform === "win32") {
+    const local = nonEmptyString2(env.LOCALAPPDATA);
+    if (local) return local;
+  }
+  const home = nonEmptyString2(env.HOME) || nonEmptyString2(env.USERPROFILE);
+  return home ? path8.join(home, ".scp") : os6.homedir() ? path8.join(os6.homedir(), ".scp") : null;
+}
+function normalizePort(value) {
+  if (value === null || value === void 0) return null;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) ? n : null;
+}
+function normalizePid(value) {
+  if (value === null || value === void 0) {
+    return typeof process.pid === "number" ? process.pid : null;
+  }
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) ? n : null;
+}
+function nonEmptyString2(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 // src/server.mjs
 var server = new McpServer({
   name: "subagent-control-protocol",
@@ -34734,6 +36091,8 @@ var server = new McpServer({
     "Use subagent_cleanup to safely plan or execute retention cleanup for run artifact directories; dryRun defaults to true."
   ].join(" ")
 });
+var statusBridgeHandle = null;
+var statusBridgeConfig = null;
 var permissionMode = external_exports.enum([
   "acceptEdits",
   "auto",
@@ -34751,7 +36110,7 @@ var taskShape = {
   dependsOn: external_exports.array(external_exports.string()).optional(),
   model: external_exports.string().optional(),
   effort: external_exports.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
-  timeoutMs: external_exports.number().int().positive().optional(),
+  timeoutMs: external_exports.number().int().positive().optional().describe("Idle timeout in milliseconds. The task is timed out only when no subagent-owned event/heartbeat is observed for this long; active heartbeat/checkpoint events keep the task alive."),
   permissionMode: permissionMode.optional(),
   addDirs: external_exports.array(external_exports.string()).optional(),
   allowedTools: external_exports.array(external_exports.string()).optional(),
@@ -34762,7 +36121,7 @@ var taskShape = {
 var defaultsShape = {
   model: external_exports.string().optional(),
   effort: external_exports.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
-  timeoutMs: external_exports.number().int().positive().optional(),
+  timeoutMs: external_exports.number().int().positive().optional().describe("Default idle timeout in milliseconds inherited by tasks. Heartbeat/checkpoint events from the subagent reset this idle window."),
   permissionMode: permissionMode.optional(),
   addDirs: external_exports.array(external_exports.string()).optional(),
   allowedTools: external_exports.array(external_exports.string()).optional(),
@@ -34919,6 +36278,39 @@ var cleanupOutputShape = {
   keptRuns: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional(),
   reclaimedBytes: external_exports.number().optional(),
   errors: external_exports.array(external_exports.record(external_exports.string(), external_exports.any())).optional(),
+  error: external_exports.object(errorDetailShape).optional()
+};
+var desktopStatusOutputShape = {
+  ok: external_exports.boolean(),
+  source: external_exports.string().optional(),
+  view: external_exports.record(external_exports.string(), external_exports.any()).nullable().optional(),
+  // Stable view-model contract tag (e.g. 'scp.run-view/v1') copied from the
+  // view so consumers can branch on schema without digging into `view`.
+  schema: external_exports.string().nullable().optional(),
+  // True when a view (or mirror snapshot) is present. The RunViewModel is always
+  // redacted by buildRunViewModel: raw prompts, stdout/stderr, env, and full
+  // command bodies are never placed in the view; command/verification snippets
+  // pass through redactForDisplay. `raw` (debug only, opt-in) is NOT redacted.
+  redacted: external_exports.boolean().optional(),
+  mirrorDir: external_exports.string().nullable().optional(),
+  mirror: external_exports.record(external_exports.string(), external_exports.any()).nullable().optional(),
+  raw: external_exports.record(external_exports.string(), external_exports.any()).optional(),
+  error: external_exports.object(errorDetailShape).optional()
+};
+var statusBridgeOutputShape = {
+  ok: external_exports.boolean(),
+  action: external_exports.string().optional(),
+  running: external_exports.boolean().optional(),
+  host: external_exports.string().optional(),
+  port: external_exports.number().int().optional(),
+  allowNonLoopback: external_exports.boolean().optional(),
+  workspace: external_exports.string().optional(),
+  outputDir: external_exports.string().optional(),
+  intervalMs: external_exports.number().int().optional(),
+  // Bridge discovery file facts (host/port/startedAt/pid/dir/path/updatedAt) so
+  // a desktop widget can locate the bridge without scraping ports. null when the
+  // bridge is not running or no discovery file is configured/present.
+  discovery: external_exports.record(external_exports.string(), external_exports.any()).nullable().optional(),
   error: external_exports.object(errorDetailShape).optional()
 };
 server.registerTool(
@@ -35095,6 +36487,64 @@ server.registerTool(
   }
 );
 server.registerTool(
+  "subagent_desktop_status",
+  {
+    title: "Read Desktop Status Snapshot",
+    description: "Return a desktop-facing SCP status view model for a run or recent run list. Optionally read/write the stable status mirror for external desktop widgets.",
+    inputSchema: {
+      runId: external_exports.string().optional().describe("Run id to read as a desktop view. When omitted, runDir or outputDir/list mode is used."),
+      runDir: external_exports.string().optional().describe("Run directory to read."),
+      workspace: external_exports.string().optional().describe("Workspace used to resolve default outputDir."),
+      outputDir: external_exports.string().optional().describe("Run artifact output directory. Defaults to <workspace>/.subagent-runs when applicable."),
+      limit: external_exports.number().int().positive().max(100).optional().describe("Recent run count in list mode."),
+      recentEventsLimit: external_exports.number().int().positive().max(1e3).optional(),
+      staleHeartbeatMs: external_exports.number().int().positive().optional(),
+      slowEventMs: external_exports.number().int().positive().optional(),
+      mirrorDir: external_exports.string().optional().describe("Override stable status mirror directory."),
+      readMirror: external_exports.boolean().optional().describe("Read the stable mirror. If no run/list input is supplied, only the mirror is returned."),
+      writeMirror: external_exports.boolean().optional().describe("Write the generated desktop view to the stable mirror. Defaults to false."),
+      includeRaw: external_exports.boolean().optional().describe("Include the raw subagent_status/subagent_collect payload for debugging. Defaults to false.")
+    },
+    outputSchema: desktopStatusOutputShape
+  },
+  async (input) => {
+    try {
+      return jsonToolResult(await loadDesktopStatus(input));
+    } catch (error51) {
+      return errorToolResult(error51, "desktop_status_failed");
+    }
+  }
+);
+server.registerTool(
+  "subagent_status_bridge",
+  {
+    title: "Control Local Desktop Status Bridge",
+    description: "Start, stop, restart, or inspect the optional localhost HTTP/SSE status bridge for desktop widgets. The bridge is disabled until explicitly started.",
+    inputSchema: {
+      action: external_exports.enum(["status", "start", "stop", "restart"]).optional().describe("Bridge action. Defaults to status."),
+      host: external_exports.string().optional().describe("Bind host. Defaults to 127.0.0.1. Non-loopback hosts require allowNonLoopback=true because the bridge has no authentication."),
+      port: external_exports.number().int().min(0).max(65535).optional().describe("Bind port. Defaults to 17361; 0 asks the OS to choose a free port."),
+      allowNonLoopback: external_exports.boolean().optional().describe("Explicitly allow binding the unauthenticated bridge to a non-loopback host. Defaults to false."),
+      workspace: external_exports.string().optional().describe("Workspace used to resolve default outputDir."),
+      outputDir: external_exports.string().optional().describe("Run artifact output directory to expose. Defaults to <workspace>/.subagent-runs."),
+      limit: external_exports.number().int().positive().max(100).optional().describe("Recent run count exposed by /runs."),
+      recentEventsLimit: external_exports.number().int().positive().max(1e3).optional(),
+      staleHeartbeatMs: external_exports.number().int().positive().optional(),
+      slowEventMs: external_exports.number().int().positive().optional(),
+      intervalMs: external_exports.number().int().positive().max(6e5).optional().describe("SSE snapshot interval. Defaults to 5000 ms."),
+      discoveryDir: external_exports.string().optional().describe("Override directory for the bridge discovery file (bridge.json) that lets external widgets find host/port. Defaults to a stable per-user data dir.")
+    },
+    outputSchema: statusBridgeOutputShape
+  },
+  async (input) => {
+    try {
+      return jsonToolResult(await handleStatusBridge(input));
+    } catch (error51) {
+      return errorToolResult(error51, "status_bridge_failed");
+    }
+  }
+);
+server.registerTool(
   "subagent_status",
   {
     title: "Read Subagent Run Status",
@@ -35161,6 +36611,191 @@ function pickTaskFields(input) {
     tools: input.tools,
     systemPrompt: input.systemPrompt
   };
+}
+async function handleStatusBridge(input = {}) {
+  const action = input.action || "status";
+  if (action === "status") return currentStatusBridgeState(action);
+  if ((action === "stop" || action === "restart") && statusBridgeHandle) {
+    await stopStatusBridge(statusBridgeHandle);
+    statusBridgeHandle = null;
+    await removeBridgeDiscoverySafe(statusBridgeConfig);
+    statusBridgeConfig = null;
+  }
+  if (action === "stop") return currentStatusBridgeState(action);
+  if (action === "start" && statusBridgeHandle) {
+    return currentStatusBridgeState(action);
+  }
+  const config2 = {
+    workspace: input.workspace,
+    outputDir: input.outputDir,
+    limit: input.limit,
+    recentEventsLimit: input.recentEventsLimit,
+    staleHeartbeatMs: input.staleHeartbeatMs,
+    slowEventMs: input.slowEventMs,
+    intervalMs: input.intervalMs || 5e3,
+    discoveryDir: input.discoveryDir
+  };
+  const handle = await startStatusBridge({
+    host: input.host,
+    port: input.port,
+    allowNonLoopback: input.allowNonLoopback,
+    providers: createStatusBridgeProviders(config2)
+  });
+  statusBridgeHandle = handle;
+  statusBridgeConfig = {
+    ...config2,
+    host: handle.host,
+    port: handle.port,
+    allowNonLoopback: input.allowNonLoopback === true,
+    startedAt: handle.startedAt
+  };
+  await writeBridgeDiscoverySafe(statusBridgeConfig);
+  return currentStatusBridgeState(action);
+}
+async function currentStatusBridgeState(action = "status") {
+  const discovery = statusBridgeConfig ? await readBridgeDiscovery(statusBridgeConfig).catch(() => null) : null;
+  return {
+    action,
+    running: Boolean(statusBridgeHandle),
+    host: statusBridgeHandle?.host,
+    port: statusBridgeHandle?.port,
+    allowNonLoopback: statusBridgeConfig?.allowNonLoopback,
+    workspace: statusBridgeConfig?.workspace,
+    outputDir: statusBridgeConfig?.outputDir,
+    intervalMs: statusBridgeConfig?.intervalMs,
+    discovery: discovery || null
+  };
+}
+async function writeBridgeDiscoverySafe(config2) {
+  if (!config2) return null;
+  try {
+    return await writeBridgeDiscovery({
+      discoveryDir: config2.discoveryDir,
+      outputDir: config2.outputDir,
+      workspace: config2.workspace,
+      host: config2.host,
+      port: config2.port,
+      startedAt: config2.startedAt,
+      pid: process.pid
+    });
+  } catch {
+    return null;
+  }
+}
+async function removeBridgeDiscoverySafe(config2) {
+  if (!config2) return null;
+  try {
+    return await removeBridgeDiscovery({
+      discoveryDir: config2.discoveryDir,
+      outputDir: config2.outputDir,
+      workspace: config2.workspace
+    });
+  } catch {
+    return null;
+  }
+}
+function createStatusBridgeProviders(config2) {
+  return {
+    async getHealth() {
+      const status = await loadDesktopStatus({
+        ...config2,
+        recentEventsLimit: config2.recentEventsLimit || 5
+      });
+      return {
+        ok: true,
+        schema: "scp.bridge-health/v1",
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        health: status.view?.health || null,
+        counts: status.view?.counts || null,
+        activeTasks: status.view?.activeTasks || []
+      };
+    },
+    async getRuns() {
+      return loadDesktopStatus(config2);
+    },
+    async getRun(runId) {
+      return loadDesktopStatus({
+        ...config2,
+        runId
+      });
+    },
+    // /events?runId=&afterSequence=&since=&limit=. The bridge normalizes
+    // afterSequence to an integer cursor and since to a string; limit stays a
+    // string. We bound the underlying loadDesktopStatus read by limit, then apply
+    // filterIncrementalEvents so the response only carries events past the cursor
+    // — never the full event log. The source window is already bounded by
+    // buildRunViewModel, so this stays small even without a cursor.
+    async getEvents(query = {}) {
+      const limit = parseEventLimit(query.limit, config2.recentEventsLimit ?? 20);
+      const status = await loadDesktopStatus({
+        ...config2,
+        runId: query.runId,
+        runDir: query.runDir,
+        recentEventsLimit: limit
+      });
+      const events = filterIncrementalEvents(status.view?.recentEvents || [], {
+        afterSequence: query.afterSequence,
+        since: query.since,
+        limit
+      });
+      return {
+        ok: true,
+        schema: "scp.bridge-events/v1",
+        runId: status.view?.runId || query.runId || null,
+        events
+      };
+    },
+    // /events/stream. The bridge calls subscribe(listener) without forwarding
+    // query params, so `query` is empty for HTTP SSE clients; the signature
+    // accepts it for direct/in-process subscribers that want a bounded cursor.
+    // Each snapshot carries only the bounded view (which includes a bounded
+    // recentEvents tail), so the stream never emits full event logs.
+    subscribe(listener, query = {}) {
+      let closed = false;
+      const recentEventsLimit = parseEventLimit(query.limit, config2.recentEventsLimit || 5);
+      const emit = () => {
+        loadDesktopStatus({
+          ...config2,
+          recentEventsLimit
+        }).then((status) => {
+          if (!closed) {
+            const snapshot = {
+              type: "snapshot",
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              view: status.view
+            };
+            if (query.afterSequence !== void 0 || query.since !== void 0) {
+              snapshot.events = filterIncrementalEvents(status.view?.recentEvents || [], {
+                afterSequence: query.afterSequence,
+                since: query.since
+              });
+            }
+            listener(snapshot);
+          }
+        }).catch((error51) => {
+          if (!closed) {
+            listener({
+              type: "error",
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              message: error51?.message || String(error51)
+            });
+          }
+        });
+      };
+      emit();
+      const timer = setInterval(emit, config2.intervalMs || 5e3);
+      return () => {
+        closed = true;
+        clearInterval(timer);
+      };
+    }
+  };
+}
+function parseEventLimit(value, fallback) {
+  const n = Number.parseInt(value, 10);
+  if (Number.isFinite(n) && n > 0) return Math.min(n, 1e3);
+  const f = Number.parseInt(fallback, 10);
+  return Number.isFinite(f) && f > 0 ? Math.min(f, 1e3) : 20;
 }
 function jsonToolResult(data) {
   const payload = { ok: true, ...data };

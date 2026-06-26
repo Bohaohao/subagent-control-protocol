@@ -101,6 +101,57 @@ selected `outputDir`.
 - Add a small result viewer for run directories.
 - Add JSON schema validation for user-provided task plans before execution.
 
+## Implemented: desktop status bridge (opt-in)
+
+SCP is the status source and a desktop monitor app is a read-only observer (the
+desktop project is separate from this repo). SCP now exposes a desktop-facing
+status snapshot through `subagent_desktop_status` and can start an optional
+read-only localhost bridge through `subagent_status_bridge`. The snapshot shape
+is defined by `schemas/desktop-status.schema.json` and versioned by its
+top-level `schema` field (`scp.run-view/v1`); consumers check that field and
+tolerate additional fields and `null` gaps.
+
+> **Status: shipped as opt-in runtime support.** The bridge is disabled by
+> default and starts only when the controller calls `subagent_status_bridge` with
+> `action: "start"`.
+
+Read-only endpoints:
+
+- `GET /health` - bridge health, counts, and active tasks.
+- `GET /runs` - recent runs and active-process list.
+- `GET /run/:runId` - one desktop run view model.
+- `GET /events` - bounded event tail; supports `afterSequence`, `since`, and
+  `limit` for cursor-based incremental reads. `afterSequence` only includes
+  events with numeric `sequence` values; clients should refresh a snapshot when
+  their cursor falls outside the bounded tail.
+- `GET /events/stream` - SSE stream of periodic `snapshot` events with a
+  `: ping` keep-alive (~15s).
+
+On start the bridge writes a small `bridge.json` discovery file
+(`scp.bridge-discovery/v1`) to a stable per-user location
+(`SCP_BRIDGE_DISCOVERY_DIR` or `<homedir>/.scp/bridge`, `%LOCALAPPDATA%\scp\bridge`
+on Windows) carrying `host`/`port`/`pid`/`startedAt` and optional
+`workspace`/`outputDir` — no secrets. It is removed on stop.
+
+Contract rules for the bridge: loopback-only by default (non-loopback hosts
+require `allowNonLoopback: true` because the bridge has no authentication);
+read-only (no dispatch/cancel/write routes); bound the event tail; tolerate
+incomplete/mid-write runs with an explicit `incomplete_or_unreadable` status;
+never surface `stdout.txt`/`stderr.txt` or raw prompt bodies by default. The
+view reduces commands/verification to display-safe labels and redacted snippets
+(best-effort display filtering, not a security boundary).
+
+Heartbeat semantics for observers: the runtime already writes periodic
+`heartbeat` events with a monotonic `sequence` to `events.jsonl`. A fresh
+heartbeat means alive; a stale/missing heartbeat means "unknown / possibly
+stalled" and must **not** trigger the bridge to kill the process — cancellation
+stays an MCP-layer operation (`subagent_cancel`). Malformed event lines are
+ignored, and a `sequence` gap is informational, not an error.
+
+The bridge remains read-only runtime support. Mutation (dispatch/cancel/cleanup)
+stays on the MCP/tool layer, and the desktop remains a viewer rather than a
+participant.
+
 ## Why MCP is better than shell
 
 - It can preserve structured task metadata without scraping stdout.

@@ -6,6 +6,8 @@ import { buildControllerSummary } from './controller-summary.mjs'
 import { assessHeartbeat, summarizeEventList, trimEvent as trimProtocolEvent } from './event-protocol.mjs'
 import { createRunId, readJson, writeJson } from './json.mjs'
 import { validateRunFileOwnership } from './ownership.mjs'
+import { readStatusMirror, resolveStatusMirrorDir, writeStatusMirror } from './status-mirror.mjs'
+import { buildRunViewModel } from './status-view.mjs'
 import {
   markRunRegistryEntry,
   recoverRunsFromOutputDir,
@@ -319,6 +321,117 @@ export async function watchRun(input = {}) {
   return input.compact || input.healthOnly
     ? compactWatchPayload(payload, input)
     : payload
+}
+
+export async function loadDesktopStatus(input = {}) {
+  if (input.readMirror === true && !input.runId && !input.runDir && !input.outputDir) {
+    const mirror = await readStatusMirror(input)
+    const mirrorView = mirror?.snapshot || null
+    return {
+      source: 'mirror',
+      mirror,
+      mirrorDir: resolveStatusMirrorDir(input),
+      view: mirrorView,
+      schema: mirrorView?.schema || null,
+      // The mirror snapshot is a previously redacted RunViewModel, so a present
+      // view always means a redacted, display-safe payload.
+      redacted: Boolean(mirrorView),
+    }
+  }
+
+  const statusPayload = input.runId
+    ? await collectRun({
+      runId: input.runId,
+      runDir: input.runDir,
+      workspace: input.workspace,
+      outputDir: input.outputDir,
+      recentEventsLimit: input.recentEventsLimit,
+      staleHeartbeatMs: input.staleHeartbeatMs,
+      slowEventMs: input.slowEventMs,
+      includeControllerSummary: false,
+    })
+    : await loadRunStatus({
+      runDir: input.runDir,
+      outputDir: input.outputDir,
+      limit: input.limit,
+      recentEventsLimit: input.recentEventsLimit,
+      staleHeartbeatMs: input.staleHeartbeatMs,
+      slowEventMs: input.slowEventMs,
+      includeControllerSummary: false,
+    })
+
+  const view = buildRunViewModel(statusPayload, {
+    staleMs: input.staleHeartbeatMs,
+  })
+  const result = {
+    source: input.runId || input.runDir ? 'run' : 'list',
+    view,
+    mirrorDir: resolveStatusMirrorDir(input),
+    // Surface the view-model schema tag and the fact that the view is always
+    // redacted (buildRunViewModel never places raw prompts/stdout/env/full
+    // command bodies; command/verification snippets pass through redactForDisplay).
+    // This lets desktop consumers assert the contract without inspecting `view`.
+    schema: view?.schema || null,
+    redacted: Boolean(view),
+  }
+
+  if (input.includeRaw === true) {
+    result.raw = statusPayload
+  }
+  if (input.writeMirror === true) {
+    result.mirror = await writeStatusMirror({
+      ...input,
+      runId: view?.runId,
+      snapshot: view,
+    })
+  } else if (input.readMirror === true) {
+    result.mirror = await readStatusMirror(input)
+  }
+
+  return result
+}
+
+// Filter a bounded event list by incremental cursor parameters, without ever
+// reading or streaming full event logs. Operates only on the already-bounded
+// recent-events window produced by buildRunViewModel (newest last), so the
+// result is always small. All parameters optional:
+//   afterSequence - return only events whose `sequence` is a number > this
+//   since         - ISO timestamp lower bound (inclusive); events with no
+//                   parseable timestamp are dropped when this is set
+//   limit         - cap the result to the most recent N events (tail)
+// Tolerates missing/malformed fields: an event with no sequence is excluded by
+// an afterSequence filter, and an event with no timestamp is excluded by a
+// since filter, so a cursor never silently leaks unbounded data.
+export function filterIncrementalEvents(events, options = {}) {
+  if (!Array.isArray(events)) return []
+  let filtered = events
+
+  const afterSequence = options.afterSequence
+  if (typeof afterSequence === 'number' && Number.isFinite(afterSequence)) {
+    filtered = filtered.filter(
+      (event) => typeof event?.sequence === 'number' && event.sequence > afterSequence,
+    )
+  }
+
+  const since = options.since
+  if (typeof since === 'string' && since.length) {
+    const sinceMs = Date.parse(since)
+    if (Number.isFinite(sinceMs)) {
+      filtered = filtered.filter((event) => {
+        const ts = event?.timestamp || event?.ts
+        if (!ts) return false
+        const ms = Date.parse(ts)
+        return Number.isFinite(ms) && ms >= sinceMs
+      })
+    }
+  }
+
+  const limit = options.limit
+  if (typeof limit === 'number' && Number.isFinite(limit) && limit >= 0) {
+    // Events are newest-last, so the most recent N is the tail.
+    filtered = filtered.slice(-Math.floor(limit))
+  }
+  return filtered
 }
 
 function retainRunHandle(record) {
@@ -770,6 +883,9 @@ function normalizeTask(task, defaults, workspace, planDir) {
   const addDirs = unique([workspace, ...(defaults.addDirs || []), ...(task.addDirs || [])])
     .map((dir) => path.resolve(planDir, dir))
 
+  // `timeoutMs` is an idle timeout, not an absolute wall-clock deadline. The
+  // runner resets the idle window when it observes a subagent-owned event or
+  // heartbeat in SCP_EVENT_LOG; runtime-owned heartbeats do not reset it.
   const timeoutMs = Number(merged.timeoutMs || 600000)
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1000) {
     throw new Error(`Task ${task.id} has invalid timeoutMs: ${merged.timeoutMs} (must be an integer >= 1000)`)

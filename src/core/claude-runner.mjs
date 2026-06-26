@@ -15,6 +15,19 @@ import { captureProcess, exists, killProcessTree } from './process-tree.mjs'
 
 const activeProcesses = new Map()
 const RUNTIME_HEARTBEAT_MS = 45_000
+const IDLE_CHECK_MAX_MS = 10_000
+const TIMEOUT_GRACE_MS = 10_000
+const RUNTIME_EVENT_TYPES = new Set([
+  'task_started',
+  'process_started',
+  'process_exited',
+  'task_completed',
+  'task_partial',
+  'task_blocked',
+  'task_failed',
+  'task_timed_out',
+  'task_cancelled',
+])
 
 export function listActiveProcesses(runId) {
   const records = runId
@@ -77,13 +90,14 @@ export async function runClaudeTask(task, context) {
   })
 
   await fs.writeFile(path.join(taskDir, 'prompt.md'), prompt, 'utf8')
-  await writeJson(path.join(taskDir, 'task.json'), {
+    await writeJson(path.join(taskDir, 'task.json'), {
     id: task.id,
     title: task.title,
     kind: task.kind,
     dependsOn: task.dependsOn,
     command: command.display,
     timeoutMs: task.timeoutMs,
+    timeoutMode: 'idle',
     cwd: task.workspace,
     eventLogPath,
   })
@@ -272,6 +286,7 @@ Task event logging:
 - The environment exposes SCP_EVENT_LOG (path to a JSONL file), SCP_RUN_ID, SCP_TASK_ID, and SCP_TASK_DIR.
 - As you work, append one compact JSON object per line to the file at SCP_EVENT_LOG to report progress. Each line must be valid JSON on its own.
 - Every event must carry a short \`type\` and an ISO \`timestamp\`. Reuse SCP_RUN_ID as \`runId\` and SCP_TASK_ID as \`taskId\` so events can be correlated back to this task. Beyond that, keep each event type's payload compact - a label or one-line summary is enough. Never include full logs, diffs, file contents, or code in events.
+- Event logging is required for long-running work. The controller treats timeoutMs (${task.timeoutMs} ms) as an idle timeout since the last subagent-owned event/heartbeat, not as an absolute wall-clock deadline. If you do not emit events for longer than that window, the controller may treat the task as stalled and stop it.
 - Emit events for these runtime milestones, each with the fields noted:
   - phase_started: \`type\`, \`timestamp\`, \`phase\` (short name of the phase you are beginning).
   - heartbeat: \`type\`, \`timestamp\`, \`runId\`, \`taskId\`, \`summary\` (one line on current progress), \`sequence\` (an integer that increments with every heartbeat so ordering is visible).
@@ -279,8 +294,8 @@ Task event logging:
   - blocked: \`type\`, \`timestamp\`, \`reason\` (one line on what you are waiting on).
   - command_started: \`type\`, \`timestamp\`, \`label\` (short name of the verification/shell command), \`command\` (one-line form, no full output).
   - command_finished: \`type\`, \`timestamp\`, \`label\`, \`exitCode\`, \`status\` ('pass' | 'fail').
-- Send a heartbeat at least every 45 seconds during long work, incrementing \`sequence\` each time.
-- Event logging is best-effort and must never replace the required JSON result; if writing to SCP_EVENT_LOG fails, continue the task and still return the JSON result.
+- Send a heartbeat at least every 45 seconds during long work, incrementing \`sequence\` each time. Do this even while reading, planning, waiting for commands, or preparing the final JSON.
+- Event logging must never replace the required JSON result; if writing to SCP_EVENT_LOG fails, return a compact JSON result or a blocked status promptly rather than working silently for a long time.
 
 Task:
 ${task.prompt}
@@ -373,12 +388,25 @@ function spawnClaude(options) {
     let stdout = ''
     let stderr = ''
     let timedOut = false
+    let timeoutReason = null
     let settled = false
     let heartbeatSequence = 0
-    let lastActivityAt = new Date().toISOString()
+    let lastActivityMs = Date.now()
+    let lastActivityAt = new Date(lastActivityMs).toISOString()
+    let lastActivitySource = 'process_started'
+    let eventLogOffset = 0
+    let checkingIdle = false
     const stdoutPath = path.join(options.taskDir, 'stdout.txt')
     const stderrPath = path.join(options.taskDir, 'stderr.txt')
     const activeKey = `${options.runId}:${options.taskId}`
+
+    const markSubagentActivity = (source) => {
+      lastActivityMs = Date.now()
+      lastActivityAt = new Date(lastActivityMs).toISOString()
+      lastActivitySource = source || 'event'
+      record.lastSubagentActivityAt = lastActivityAt
+      record.lastSubagentActivitySource = lastActivitySource
+    }
 
     const record = {
       runId: options.runId,
@@ -388,6 +416,10 @@ function spawnClaude(options) {
       startedAt: new Date().toISOString(),
       cancelled: false,
       eventLogPath: options.eventLogPath,
+      timeoutMs: options.timeoutMs,
+      timeoutMode: 'idle',
+      lastSubagentActivityAt: lastActivityAt,
+      lastSubagentActivitySource: lastActivitySource,
     }
     activeProcesses.set(activeKey, record)
 
@@ -417,7 +449,7 @@ function spawnClaude(options) {
     const finish = async ({ exitCode, signal }) => {
       if (settled) return
       settled = true
-      clearTimeout(timeout)
+      clearInterval(timeout)
       clearTimeout(killGraceTimeout)
       clearInterval(heartbeat)
       activeProcesses.delete(activeKey)
@@ -431,28 +463,60 @@ function spawnClaude(options) {
         exitCode,
         signal: signal || null,
         timedOut,
+        timeoutReason,
         cancelled: Boolean(record.cancelled),
       })
-      resolve({ stdout, stderr, exitCode, signal, timedOut, cancelled: Boolean(record.cancelled) })
+      resolve({ stdout, stderr, exitCode, signal, timedOut, timeoutReason, cancelled: Boolean(record.cancelled) })
     }
 
     let killGraceTimeout = null
-    const timeout = setTimeout(async () => {
-      timedOut = true
-      await killProcessTree(child.pid)
-      killGraceTimeout = setTimeout(async () => {
-        await finish({ exitCode: 1, signal: 'timeout_grace_expired' })
-      }, 10000)
-    }, options.timeoutMs)
+    const checkIntervalMs = Math.min(IDLE_CHECK_MAX_MS, Math.max(1000, Math.floor(options.timeoutMs / 10)))
+    const checkIdleTimeout = async () => {
+      if (settled || timedOut || checkingIdle) return
+      checkingIdle = true
+      try {
+        const scan = await scanSubagentEventActivity(options.eventLogPath, eventLogOffset)
+        eventLogOffset = scan.offset
+        if (scan.activity) markSubagentActivity(scan.activity.type)
+
+        const idleMs = Date.now() - lastActivityMs
+        if (idleMs < options.timeoutMs) return
+
+        timedOut = true
+        timeoutReason = 'idle_timeout'
+        clearInterval(timeout)
+        await appendEvent(options.eventLogPath, {
+          type: 'idle_timeout',
+          source: 'runtime',
+          runId: options.runId,
+          taskId: options.taskId,
+          summary: 'No subagent-owned event or heartbeat was observed within timeoutMs.',
+          timeoutMs: options.timeoutMs,
+          idleMs,
+          lastSubagentActivityAt: lastActivityAt,
+          lastSubagentActivitySource: lastActivitySource,
+        })
+        await killProcessTree(child.pid)
+        killGraceTimeout = setTimeout(async () => {
+          await finish({ exitCode: 1, signal: 'timeout_grace_expired' })
+        }, TIMEOUT_GRACE_MS)
+      } finally {
+        checkingIdle = false
+      }
+    }
+    const timeout = setInterval(() => {
+      checkIdleTimeout().catch(() => {
+        // Watchdog failures must not crash the runner; the next tick retries.
+      })
+    }, checkIntervalMs)
+    timeout.unref?.()
 
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
     child.stdout.on('data', (chunk) => {
-      lastActivityAt = new Date().toISOString()
       stdout += chunk
     })
     child.stderr.on('data', (chunk) => {
-      lastActivityAt = new Date().toISOString()
       stderr += chunk
     })
     child.on('error', async (error) => {
@@ -531,6 +595,50 @@ function lastEventTimestamp(eventLogPath) {
   } catch {
     return null
   }
+}
+
+async function scanSubagentEventActivity(eventLogPath, offset = 0) {
+  if (!eventLogPath) return { offset, activity: null }
+  let handle
+  try {
+    handle = await fs.open(eventLogPath, 'r')
+    const stats = await handle.stat()
+    const start = Number.isInteger(offset) && offset >= 0 && offset <= stats.size ? offset : 0
+    if (stats.size <= start) return { offset: stats.size, activity: null }
+
+    const length = stats.size - start
+    const buffer = Buffer.alloc(length)
+    await handle.read(buffer, 0, length, start)
+
+    let activity = null
+    const lines = buffer.toString('utf8').split(/\r?\n/)
+    for (const line of lines) {
+      if (!line.trim()) continue
+      let event
+      try {
+        event = JSON.parse(line)
+      } catch {
+        continue
+      }
+      if (isSubagentActivityEvent(event)) activity = event
+    }
+    return { offset: stats.size, activity }
+  } catch {
+    return { offset, activity: null }
+  } finally {
+    if (handle) {
+      await handle.close().catch(() => {})
+    }
+  }
+}
+
+function isSubagentActivityEvent(event) {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return false
+  const type = typeof event.type === 'string' ? event.type : ''
+  if (!type) return false
+  if (event.source === 'runtime') return false
+  if (RUNTIME_EVENT_TYPES.has(type)) return false
+  return true
 }
 
 // Append one compact JSON object as a line to the per-task event log. Best

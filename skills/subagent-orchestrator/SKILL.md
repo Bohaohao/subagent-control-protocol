@@ -36,6 +36,25 @@ Codex MUST infer decomposition, the todoList, and parallelism from that — the 
 
 Use the MCP tools to *execute*; use this Skill to *decide*.
 
+### Desktop status boundary
+
+SCP is the status source; any desktop monitor app is a **read-only observer**.
+The desktop project is separate from this repo and is not part of the plugin
+bundle. The desktop may watch runs through `subagent_desktop_status`, an
+optional stable `status.json` mirror, or the opt-in read-only localhost bridge
+started with `subagent_status_bridge`. The desktop view model is defined by
+`schemas/desktop-status.schema.json` and versioned by its top-level `schema`
+field (`scp.run-view/v1`); a widget reads `bridge.json`
+(`scp.bridge-discovery/v1`, written on bridge start, removed on stop) to find
+the bridge's `host`/`port`. The bridge is loopback-only by default; non-loopback
+hosts require explicit `allowNonLoopback: true` because the bridge has no
+authentication. The desktop never dispatches, cancels, or writes run state.
+Dispatch and cancellation stay on the MCP/tool layer
+(`subagent_run_*`, `subagent_cancel`); the controller (Codex) stays the only
+decision-maker. A stale or missing heartbeat shown by the desktop means
+"unknown / possibly stalled" - it is a signal to surface, not a trigger to kill a
+process.
+
 ## Decision rules
 
 - **One bounded task → `subagent_run_task`.** A single review, implementation, research, or verification job.

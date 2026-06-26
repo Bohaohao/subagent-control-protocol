@@ -26,6 +26,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { buildRunViewModel } from '../src/core/status-view.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const packageRoot = path.resolve(__dirname, '..')
@@ -210,6 +211,7 @@ try {
   assert.equal(oneRun.status, 200, '/run/:runId must respond 200')
   assert.equal(oneRun.json.view.runId, runId, '/run/:runId must resolve the requested run')
   assert.equal(oneRun.json.view.schema, 'scp.run-view/v1')
+  assert.equal(typeof oneRun.json.view.staleThresholdMs, 'number', '/run/:runId view must expose staleThresholdMs')
 
   // /events: bounded incremental event window for a run.
   const events = await httpGetJson(
@@ -225,6 +227,73 @@ try {
     events.json.events.every((event) => event.timestamp),
     'every bridged event must carry a timestamp',
   )
+  assert.ok(
+    events.json.events.every((event) => typeof event.sequence === 'number'),
+    'bridged events must carry numeric run-global sequence values',
+  )
+  for (let i = 1; i < events.json.events.length; i += 1) {
+    assert.ok(
+      events.json.events[i].sequence > events.json.events[i - 1].sequence,
+      'bridged event sequences must increase monotonically within the returned window',
+    )
+  }
+
+  // Direct producer assertions for contract edge cases that a bridge smoke run
+  // does not naturally cover: summary-only tasks must not count stale, and
+  // statusless in-progress tasks must not be folded into partial/completed.
+  const summaryOnlyNow = Date.parse('2026-06-26T10:00:10.000Z')
+  const summaryOnlyView = buildRunViewModel({
+    mode: 'single',
+    done: false,
+    status: 'running',
+    summary: {
+      runId: 'summary-only-run',
+      runDir: 'D:/tmp/summary-only-run',
+      tasks: [
+        {
+          id: 'codex-1',
+          taskDir: 'D:/tmp/summary-only-run/tasks/codex-1',
+          runtime: 'codex',
+          dispatcher: 'codex-worker',
+        },
+      ],
+    },
+    active: [
+      {
+        taskId: 'codex-1',
+        startedAt: '2026-06-26T10:00:00.000Z',
+      },
+    ],
+    taskEvents: [],
+  }, { now: () => summaryOnlyNow, staleMs: 1000 })
+  assert.equal(summaryOnlyView.activeTasks[0].observability, 'summary-only', 'summary-only active task must expose observability')
+  assert.equal(summaryOnlyView.health?.staleCount, undefined, 'summary-only active task must not count as stale without heartbeats')
+
+  const inProgressView = buildRunViewModel({
+    mode: 'single',
+    done: false,
+    status: 'running',
+    summary: {
+      runId: 'in-progress-run',
+      runDir: 'D:/tmp/in-progress-run',
+      tasks: [
+        {
+          id: 'task-1',
+          taskDir: 'D:/tmp/in-progress-run/tasks/task-1',
+        },
+      ],
+    },
+    active: [
+      {
+        taskId: 'task-1',
+        startedAt: '2026-06-26T10:00:00.000Z',
+        lastHeartbeatAt: '2026-06-26T10:00:09.000Z',
+      },
+    ],
+    taskEvents: [],
+  }, { now: () => summaryOnlyNow, staleMs: 1000 })
+  assert.equal(inProgressView.status, 'running', 'statusless in-progress task must keep the run in running state')
+  assert.match(inProgressView.progressHint, /^0\/1 tasks/, 'statusless in-progress task must not inflate partial progress')
 
   // /events/stream: SSE snapshot pushed on subscribe. A widget opens this for
   // live updates; assert the first frame is a snapshot carrying a run view.

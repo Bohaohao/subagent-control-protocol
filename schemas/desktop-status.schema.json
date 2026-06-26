@@ -55,7 +55,12 @@
     "stalenessMs": {
       "type": ["integer", "null"],
       "minimum": 0,
-      "description": "Milliseconds since lastUsefulEventAt (or, in list mode, since the oldest active-task heartbeat). null when not computable. Compare against the run's staleMs threshold to flag a stalled run."
+      "description": "Milliseconds since lastUsefulEventAt (or, in list mode, since the oldest active-task heartbeat). null when not computable. Compare against staleThresholdMs to flag a stalled live run."
+    },
+    "staleThresholdMs": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "The freshness threshold in milliseconds used for stale classification. Compare stalenessMs against this shared threshold; summary-only tasks do not become stale solely because they lack heartbeats."
     },
     "startedAt": { "type": ["string", "null"] },
     "endedAt": { "type": ["string", "null"] },
@@ -74,7 +79,9 @@
         "failed": { "type": "integer", "minimum": 0 },
         "skipped": { "type": "integer", "minimum": 0 },
         "cancelled": { "type": "integer", "minimum": 0 },
-        "timedOut": { "type": "integer", "minimum": 0 }
+        "timedOut": { "type": "integer", "minimum": 0 },
+        "running": { "type": "integer", "minimum": 0 },
+        "pending": { "type": "integer", "minimum": 0 }
       }
     },
     "health": {
@@ -97,8 +104,8 @@
     },
     "activeTasks": {
       "type": "array",
-      "description": "In-flight subagent process records (taskId, pid, heartbeats, phase).",
-      "items": { "type": "object", "additionalProperties": true }
+      "description": "In-flight subagent process records, sorted stably to avoid snapshot jitter. Observability='live' means freshness/stale logic may use heartbeats/events; observability='summary-only' means the task may be active but only summary/terminal data is expected, so missing heartbeat data alone must not mark it stale.",
+      "items": { "$ref": "#/$defs/activeTaskView" }
     },
     "recentEvents": {
       "type": "array",
@@ -208,6 +215,53 @@
         "fallbackApplied": {
           "type": ["boolean", "null"],
           "description": "Optional. True when a requested Codex worker alias fell back to another worker type (for example zhipu-worker -> normal-worker). This does not describe UI rendering fallback. null when not applicable."
+        },
+        "observability": {
+          "type": ["string", "null"],
+          "enum": ["live", "summary-only", null],
+          "description": "Optional. 'live' = real heartbeats/events may be tracked; 'summary-only' = only summary/terminal visibility is expected. summary-only is not a failure state and must not be treated as stale solely because heartbeat data is absent."
+        }
+      }
+    },
+    "activeTaskView": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Display-safe view of an in-flight task. These records are stable-ordered for snapshot rendering. runtime/dispatcher/workerType/workerAlias/fallbackApplied/observability use the same semantics as taskView.",
+      "properties": {
+        "taskId": { "type": ["string", "null"] },
+        "title": { "type": ["string", "null"] },
+        "pid": { "type": ["integer", "null"] },
+        "startedAt": { "type": ["string", "null"] },
+        "lastEventAt": { "type": ["string", "null"] },
+        "lastHeartbeatAt": { "type": ["string", "null"] },
+        "phase": { "type": ["string", "null"] },
+        "eventLogPath": { "type": ["string", "null"] },
+        "runtime": {
+          "type": ["string", "null"],
+          "enum": ["claude", "codex", null],
+          "description": "Optional. Which agent runtime owns this active task. 'claude' = a Claude subagent driven through SCP heartbeats/events; 'codex' = a Codex worker task. null when undetermined."
+        },
+        "dispatcher": {
+          "type": ["string", "null"],
+          "enum": ["scp-claude", "codex-worker", null],
+          "description": "Optional. How the task was dispatched. 'scp-claude' = dispatched via the SCP Node MCP runtime as a Claude subagent; 'codex-worker' = dispatched as a Codex worker."
+        },
+        "workerType": {
+          "type": ["string", "null"],
+          "description": "Optional. Resolved worker/agent type for display and filtering (for example 'huoshan-worker', 'zhipu-worker', 'normal-worker', or a Claude task role). Opaque to SCP; null when not provided."
+        },
+        "workerAlias": {
+          "type": ["string", "null"],
+          "description": "Optional. Human-friendly alias or nickname that resolved to workerType (for example 'huoshan'). Opaque to SCP; null when not provided."
+        },
+        "fallbackApplied": {
+          "type": ["boolean", "null"],
+          "description": "Optional. True when a requested Codex worker alias fell back to another worker type. This does not describe UI rendering fallback."
+        },
+        "observability": {
+          "type": ["string", "null"],
+          "enum": ["live", "summary-only", null],
+          "description": "Optional. 'live' = freshness can be evaluated from real heartbeats/events. 'summary-only' = only summary/terminal visibility is expected, so missing heartbeat data alone must not mark the task stale."
         }
       }
     },
@@ -242,7 +296,7 @@
         "exitCode": { "type": ["integer", "null"] },
         "sequence": {
           "type": ["integer", "null"],
-          "description": "Monotonic event cursor when available. Cursor reads using afterSequence only include events with numeric sequence values; null-sequence events remain snapshot-only."
+          "description": "Run-global monotonic cursor for the merged run event stream. Cursor reads using afterSequence only include events with numeric sequence values; null-sequence events remain snapshot-only."
         },
         "durationMs": { "type": "integer", "minimum": 0 }
       }

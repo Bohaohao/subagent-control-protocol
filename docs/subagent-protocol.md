@@ -188,7 +188,8 @@ that the process is alive, but they do not reset the idle timeout on their own.
 
 Events must stay small. They should include `type`, `timestamp`, `runId`,
 `taskId`, and one-line context fields such as `summary`, `reason`, `phase`,
-`label`, or `command`. Heartbeats should include an incrementing `sequence`.
+`label`, or `command`. Heartbeats may include a task-local incrementing
+`sequence` in the raw task event log.
 Optional controller hints include `progress`, `etaSeconds`, `severity`, and
 `needsController`.
 
@@ -269,9 +270,16 @@ The model covers two modes: `mode: "run"` (one run snapshot) and
 - `health` — coarse `{ level, running, activeCount, staleCount, failedCount,
   blockedCount }`.
 - `counts` — task outcome tallies.
+- `counts.running` / `counts.pending` stay distinct from `counts.partial`.
 - `activeTaskCount`, `lastUsefulEventAt`, `stalenessMs` — liveness signals.
-  Compare `stalenessMs` against the run's stale threshold before flagging a run
-  as stalled.
+  Compare `stalenessMs` against the producer-provided `staleThresholdMs` before
+  flagging a run as stalled.
+- `tasks[]` / `activeTasks[]` may include `runtime`, `dispatcher`,
+  `workerType`, `workerAlias`, `fallbackApplied`, and `observability`.
+  `observability = live` means freshness may be derived from real
+  heartbeats/events; `observability = summary-only` means only summary/terminal
+  visibility is expected and heartbeat absence alone must not mark the task
+  stale.
 - `tokenEvidence` — measured (never self-reported) usage; `measured: false`
   means no usage numbers are available.
 
@@ -360,20 +368,23 @@ without re-fetching the whole tail:
 
 The tail is always bounded: the run view model keeps at most a small
 `recentEvents` window (newest last), mirroring the `recentEventsLimit` behavior
-of `subagent_status`. The bridge never streams a full `events.jsonl`; a widget
-that needs longer history should persist its own `afterSequence` cursor between
-polls. `afterSequence` only applies to events with a numeric `sequence`;
-null-sequence events are omitted from cursor responses and remain visible
-through fresh snapshots or `since` polling. If a cursor falls outside the
-bounded tail and returns no events, keep the last rendered snapshot and refresh
-from `/run/:runId` or `/runs`.
+of `subagent_status`. `recentEvents` is a bounded overview window; `GET /events`
+is bounded incremental retrieval over that merged run stream; the bridge never
+streams a full `events.jsonl`. A widget that needs longer history should persist
+its own `afterSequence` cursor between polls. `afterSequence` only applies to
+events with a numeric `sequence`; null-sequence events are omitted from cursor
+responses and remain visible through fresh snapshots or `since` polling. In the
+desktop run view, `sequence` is a **run-global monotonic cursor** assigned to
+the merged run event stream, not a task-local heartbeat counter. If a cursor
+falls outside the bounded tail and returns no events, keep the last rendered
+snapshot and refresh from `/run/:runId` or `/runs`.
 
 `GET /events/stream` is an SSE channel. On connect the bridge sends a
 `: connected` comment, then pushes periodic `snapshot` events (one per
 provider-emitted snapshot). A `: ping` keep-alive comment is sent roughly every
 15 seconds so proxies and clients can detect a dead bridge even when no events
 flow. The stream is observer-only: it carries snapshots, not dispatch/cancel
-control.
+control, and it is not a raw per-event pipe.
 
 ### Heartbeat semantics for observers
 

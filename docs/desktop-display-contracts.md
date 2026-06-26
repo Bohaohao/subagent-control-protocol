@@ -95,6 +95,12 @@ A persistent, low-distraction, collapsible right-side dock. Its job is to contin
 - Auto-expand policy is a named configuration with a fixed default: `never` | `selectedSessionOnly` (default) | `anyFailedOrBlocked`.
 - Peripheral alerts: taskbar/Dock badge count; system notifications limited to failed / blocked / waiting-on-user; optional subtle sound, off by default.
 
+Additional v1 rules for `right-dock`:
+
+- Default grouping is `runtime -> workerType`. The session stack MUST show group summary before drilling into individual tasks.
+- Expansion must remain bounded at any concurrency level; the dock MUST NOT auto-expand without an explicit limit.
+- `badgeCount` means **attention-needed task count**, not run count.
+
 ### 4.2 `workbench` — Workbench (Mode 2)
 
 The primary daily workbench for actively supervising runs, chasing problems, and inspecting detail. Keywords: `controller-first`, `dense but calm`, `readable under stress`.
@@ -105,16 +111,24 @@ The primary daily workbench for actively supervising runs, chasing problems, and
 - Default window `1100–1280 × 720`. Below ~980px width the right column collapses to a tab; below ~820px it degrades to a single column.
 - Interaction: the selected run/task is sticky and is never auto-reclaimed by new events; `Follow live` is explicitly visible; manual scroll-back surfaces a `Jump to latest` affordance; connection errors degrade a region, never the whole page. Full keyboard path: ↑/↓ to move runs, Enter to open detail, Tab between columns, shortcuts for common recovery actions.
 
+Additional v1 rules for `workbench`:
+
+- The Task Table MUST be virtualized.
+- Default filters MUST include `runtime`, `workerType`, `status`, and `observability`.
+- Selection and `Follow live` behavior MUST NOT depend on transport order or event arrival order.
+
 ### 4.3 `wallboard` — Wallboard (Mode 3)
 
 A presentation-grade, ambient oversight board for large screens, demos, and sideline monitoring. Its job is to make "Codex is orchestrating a fleet of Claude subagents" legible at a glance, with real dynamics — not fine-grained operation.
 
 - v1 is bounded to what `scp.run-view/v1` honestly supports (see §1.1, §8.6). The full conductor/handoff narrative is deferred to v2 pending main-plugin schema expansion.
 - Mixed rendering: motion/atmosphere on canvas; hero metrics, session clusters, alerts, events, and token/cost numbers in DOM. Canvas regions MUST provide a DOM/aria text mirror (see §6.3).
+- Density handling is concurrency-agnostic: clustering, label suppression, and degradation MUST be driven by data density and viewport/performance budget, not by a hard-coded “20 agents” assumption.
 - Stage layout uses **two independent axes**. The percentages below do NOT sum to a single 100% budget; reading all six as one list yields ~126% only because a vertical band list and a horizontal split list are shown together. Concretely:
   - **Vertical axis** — full-width height bands stacked top→bottom: Command Bar (~7%), Hero Metrics Band (~15%), the middle Body band (~74%, the remainder), bottom Status Ribbon / Event Ticker (~4%).
   - **Horizontal axis** — width split *within the middle Body band only*: left Session Clusters (~22%), center Agent Swarm / Conductor Core (~48%), right Alerts + Events (~30%). These three sum to ~100% of the body width.
 - Hero metrics are limited to three (machine tokens in parentheses): `agentsInFlight` (Agents in flight), `tasksCompletedThisSession` (Tasks completed this session), `measuredTokensProcessed` (Measured tokens processed).
+- Each hero metric MUST declare its provenance / `derivedFrom` field(s); the UI must not synthesize its own source.
 
 ---
 
@@ -127,7 +141,15 @@ These invariants apply to all three modes. They are normative.
 - A `Session` maps to one scheduling run (`ScpRunView`). A `Subagent` maps to one Claude subtask (`ScpTaskView` / `ScpActiveTask`). These view-model types are defined in `subagent-monitor-desktop/src/types/models.ts`.
 - The UI MUST render values that the view model actually provides. A missing/unknown value is rendered as `null`-equivalent (e.g. "—" or a localized "unknown"), never as a fabricated zero, empty-progress, or "looks busy" signal.
 - High-priority state MUST NOT be expressed by color alone. It requires at least one additional channel among: position, border, text label, icon.
-- The current view model reliably supports: run/task counts; per-task status, kind, duration, `filesChanged`, `risks`, `verification`; `recentEvents`; accumulated token evidence; `stalenessMs`, `lastHeartbeatAt`, `lastUsefulEventAt`. Anything beyond this list is out of scope for v1 display (see §1.1).
+- The current view model reliably supports: run/task counts; per-task status, kind, duration, `filesChanged`, `risks`, `verification`; `recentEvents`; accumulated token evidence; `stalenessMs`, `staleThresholdMs`, `lastHeartbeatAt`, `lastUsefulEventAt`; task/active-task `runtime`, `dispatcher`, `workerType`, `workerAlias`, `fallbackApplied`, and `observability`.
+- `recentEvents` is a bounded overview window; `/events` is bounded incremental retrieval; `/events/stream` is snapshot SSE. No mode may treat any of the three as a raw, unbounded event pipe.
+- Default high-density grouping is `runtime -> workerType`. A mode may let the user pivot away from that grouping, but it must not force the user to infer topology from an ungrouped flat stream.
+
+### 5.1.1 Observability truth boundary
+
+- `observability = live` means the UI may track freshness from real heartbeats/events and may render “currently live” affordances.
+- `observability = summary-only` means only summary/terminal visibility is guaranteed. `summary-only` is not a failure state, and the UI MUST NOT fake live heartbeat pulses, streaming tickers, or “online” node choreography for it.
+- `observability = null` means unknown. Unknown must render conservatively, not optimistically.
 
 ### 5.2 Token display honesty
 
@@ -165,6 +187,7 @@ These invariants apply to all three modes. They are normative.
 
 - Staleness is derived from `stalenessMs` against the run's stale threshold. A stale run is marked `STALE` and surfaced in the Health Ribbon / status dot, not hidden.
 - Stale data is shown with its age; it is never relabeled as fresh. The freshness indicator and stale threshold source MUST be shared across all modes (single source; see §8.5).
+- Missing heartbeat data only contributes to stale classification for `observability = live`. A `summary-only` task may be quiet, old, or terminal, but it is not stale merely because no heartbeat exists.
 
 ---
 
@@ -243,17 +266,23 @@ Declarative expansion policy per mode:
 - `right-dock`: default-expanded = most-recent active/running/blocked session; subagents collapsed by default; collapsing a session collapses its subagents; new events refresh dot + timestamp only (no force-expand); auto-expand policy enum `never` | `selectedSessionOnly` (default) | `anyFailedOrBlocked`.
 - `workbench`: selected run/task is sticky (never auto-reclaimed); `Follow live` explicit; `Jump to latest` on manual scroll-back; center column segments Run Header → Task Table → Selected Task Inspection.
 - `wallboard`: no user expansion model in v1 (read-only board); panel visibility follows degradation rules.
+- `right-dock` group summary must appear before individual task rows, and expansion must remain bounded at any concurrency.
+- `workbench` Task Table virtualization and filter state are part of the contract, not an implementation detail.
+- `wallboard` visibility changes are driven by density clustering and degradation, not by a hard-coded task-count cutoff.
 
 ### 8.4 Notification policy
 
 - `right-dock`: taskbar/Dock badge count; system notifications restricted to failed / blocked / waiting-on-user (filter tokens `failed` | `blocked` | `waitingOnUser`); optional subtle sound, default off.
 - `workbench`: in-app region-level alerts; no system notifications by default; errors degrade a region, not the page.
 - `wallboard`: alert rail + event ticker for high-priority items; no desktop system notifications.
+- The `right-dock` badge count is the **attention-needed task count**, not the number of runs.
 
 ### 8.5 Freshness thresholds
 
 - Staleness is computed from `stalenessMs` vs the run's stale threshold (`STALE` classification). The threshold source and the freshness indicator are shared single-source utilities across all modes.
 - The `STALE` / `ACTIVE` / `BLOCKED` / `FAILED` / `DONE_TOTAL` Health Ribbon metrics MUST declare their value provenance — which view-model field each is derived from — before implementation. This provenance is recorded in the mirrors (schema `healthRibbonMetric.derivedFrom`, TS `DesktopHealthRibbon.provenance`). Metric tokens match the schema `healthRibbonMetricIdEnum` / TS `DesktopHealthRibbonMetric` exactly; note `DONE_TOTAL`, not `DONE / TOTAL` or `DONE-TOTAL`.
+- `staleThresholdMs` is the producer-provided threshold source. Modes must not introduce their own hidden stale cutoff.
+- `ACTIVE` / `STALE` metrics must be derived from producer fields, not inferred from animation state. `summary-only` tasks are excluded from heartbeat-only stale classification.
 
 ### 8.6 Wallboard degradation rules
 
@@ -265,6 +294,7 @@ Declarative expansion policy per mode:
 - Reduced-motion path (§5.3): static conductor core, no particles/drift/orbit, hero metrics still update, event ticker as static list, node state via brightness/border/text only.
 - Failure theater (bounded): problem nodes shift cool → warm amber with non-color signals (border change, text label, ticker entry); central core dims and draws a thin thread to the problem node. Forbidden: red-screen alarms, full-screen flashing, color-only changes, bare `Awaiting direction.` without context.
 - v1 honesty boundary: the deferred visual effects `conductorSweep` (Conductor Sweep), `handoffRibbon` (Handoff Ribbon), and `tokenRiver` (Token River) are NOT rendered in v1 because the view model cannot substantiate them. They are reserved for v2, gated on the main plugin adding the corresponding schema fields (deferred capabilities such as `agentToAgentHandoffEdges`, `controllerToAgentTopology`, `serverProvidedTokenRate` / `serverProvidedThroughputRate`, etc.).
+- In high-density situations, wallboard degrades by grouping and clustering first: `runtime -> workerType -> session cluster -> individual task`. It must never imply a fake topology or fake handoff edge just to stay visually full.
 
 ---
 

@@ -33895,9 +33895,9 @@ function nonEmptyString(value) {
 init_define_SCP_RESULT_SCHEMA_INLINE();
 var DEFAULT_STALE_MS2 = 12e4;
 var SNIPPET_LIMIT2 = 200;
-var MAX_RECENT_EVENTS2 = 12;
 var MAX_RISKS2 = 8;
 var MAX_NEXT_ACTIONS2 = 10;
+var OBSERVABILITY_VALUES = /* @__PURE__ */ new Set(["live", "summary-only"]);
 var USEFUL_EVENT_TYPES = /* @__PURE__ */ new Set([
   "run_started",
   "run_finished",
@@ -33928,7 +33928,7 @@ function buildRunViewModel(input, options = {}) {
   const recentEvents = collectRecentEvents(runtime, summary);
   const tokenEvidence = summarizeTokenEvidence({ summary, tasks });
   const health = buildHealth(summary, runtime, counts, { now, staleMs });
-  const activeTasks = collectActive2(runtime);
+  const activeTasks = collectActive2(runtime, tasks);
   const lastEvent = lastUsefulEvent(recentEvents);
   const running = status === "running" || phase === "in_progress";
   const display = buildDisplayFields({
@@ -33955,6 +33955,7 @@ function buildRunViewModel(input, options = {}) {
     activeTaskCount: display.activeTaskCount,
     lastUsefulEventAt: display.lastUsefulEventAt,
     stalenessMs: display.stalenessMs,
+    staleThresholdMs: staleMs,
     counts,
     tasks: taskViewModels,
     activeTasks,
@@ -34004,7 +34005,8 @@ function buildTaskViewModel(input) {
     dispatcher: firstString(task.dispatcher, parsed.dispatcher),
     workerType: firstString(task.workerType, parsed.workerType),
     workerAlias: firstString(task.workerAlias, parsed.workerAlias),
-    fallbackApplied: firstBoolean(task.fallbackApplied, parsed.fallbackApplied)
+    fallbackApplied: firstBoolean(task.fallbackApplied, parsed.fallbackApplied),
+    observability: resolveObservability(task, parsed)
   };
   return pruneUndefined2(out);
 }
@@ -34166,7 +34168,18 @@ function collectTasks2(summary, runtime) {
   return candidates.filter((task) => task && typeof task === "object" && (task.id || task.taskDir));
 }
 function countTasks2(summary, tasks) {
-  const empty = { total: 0, completed: 0, partial: 0, blocked: 0, failed: 0, skipped: 0, cancelled: 0, timedOut: 0 };
+  const empty = {
+    total: 0,
+    completed: 0,
+    partial: 0,
+    blocked: 0,
+    failed: 0,
+    skipped: 0,
+    cancelled: 0,
+    timedOut: 0,
+    running: 0,
+    pending: 0
+  };
   if (summary && typeof summary.totalTasks === "number") {
     return {
       total: summary.totalTasks,
@@ -34176,7 +34189,9 @@ function countTasks2(summary, tasks) {
       failed: num2(summary.failedTasks),
       skipped: num2(summary.skippedTasks),
       cancelled: num2(summary.cancelledTasks),
-      timedOut: num2(summary.timedOutTasks)
+      timedOut: num2(summary.timedOutTasks),
+      running: num2(summary.runningTasks),
+      pending: num2(summary.pendingTasks)
     };
   }
   for (const task of tasks) {
@@ -34192,6 +34207,7 @@ function resolveStatus2(summary, runtime, counts) {
   if (runtime?.done === false) return "running";
   if (summary && typeof summary.status === "string") return normalizeRunStatus(summary.status);
   if (summary?.error) return "failed";
+  if (counts.running > 0 || counts.pending > 0) return "running";
   if (counts.cancelled > 0) return "cancelled";
   if (counts.failed > 0 || counts.timedOut > 0) return "failed";
   if (counts.blocked > 0) return "blocked";
@@ -34201,9 +34217,9 @@ function resolveStatus2(summary, runtime, counts) {
 }
 function buildHealth(summary, runtime, counts, { now, staleMs }) {
   const failed = counts.failed + counts.timedOut;
-  const running = runtime?.done === false || summary && !summary.endedAt && counts.total > 0 && counts.completed + counts.partial < counts.total;
+  const running = runtime?.done === false || counts.running > 0 || counts.pending > 0 || summary && !summary.endedAt && counts.total > 0 && counts.completed + counts.partial < counts.total;
   const active = Array.isArray(runtime?.active) ? runtime.active : [];
-  const staleCount = countStale(active, runtime?.taskEvents, { now, staleMs });
+  const staleCount = countStale(collectActive2(runtime, collectTasks2(summary, runtime)), runtime?.taskEvents, { now, staleMs });
   let level;
   if (failed > 0) level = "error";
   else if (counts.blocked > 0 || staleCount > 0) level = "warning";
@@ -34230,6 +34246,7 @@ function countStale(active, taskEvents, { now, staleMs }) {
   let stale = 0;
   for (const record2 of active) {
     if (!record2 || !record2.taskId) continue;
+    if (record2.observability !== "live") continue;
     const events = eventMap.get(record2.taskId) || {};
     const reference = events.lastHeartbeatAt || events.lastEventAt || record2.lastHeartbeatAt || record2.lastEventAt;
     if (!reference) {
@@ -34241,8 +34258,12 @@ function countStale(active, taskEvents, { now, staleMs }) {
   }
   return stale;
 }
-function collectActive2(runtime) {
+function collectActive2(runtime, tasks = []) {
   if (!Array.isArray(runtime?.active)) return [];
+  const metadata = /* @__PURE__ */ new Map();
+  for (const task of tasks) {
+    if (task?.id) metadata.set(task.id, task);
+  }
   return runtime.active.filter((record2) => record2 && record2.taskId).map((record2) => pruneUndefined2({
     taskId: record2.taskId,
     title: record2.title || void 0,
@@ -34251,15 +34272,21 @@ function collectActive2(runtime) {
     lastEventAt: record2.lastEventAt || void 0,
     lastHeartbeatAt: record2.lastHeartbeatAt || void 0,
     phase: record2.phase || void 0,
-    eventLogPath: record2.eventLogPath || void 0
-  }));
+    eventLogPath: record2.eventLogPath || void 0,
+    runtime: firstString(record2.runtime, metadata.get(record2.taskId)?.runtime, metadata.get(record2.taskId)?.parsed?.workerRuntime, metadata.get(record2.taskId)?.parsed?.runtime),
+    dispatcher: firstString(record2.dispatcher, metadata.get(record2.taskId)?.dispatcher, metadata.get(record2.taskId)?.parsed?.dispatcher),
+    workerType: firstString(record2.workerType, metadata.get(record2.taskId)?.workerType, metadata.get(record2.taskId)?.parsed?.workerType),
+    workerAlias: firstString(record2.workerAlias, metadata.get(record2.taskId)?.workerAlias, metadata.get(record2.taskId)?.parsed?.workerAlias),
+    fallbackApplied: firstBoolean(record2.fallbackApplied, metadata.get(record2.taskId)?.fallbackApplied, metadata.get(record2.taskId)?.parsed?.fallbackApplied),
+    observability: resolveObservability(record2, metadata.get(record2.taskId)?.parsed || metadata.get(record2.taskId))
+  })).sort(compareActiveTaskView);
 }
 function collectRecentEvents(runtime, summary) {
   let events = [];
   if (Array.isArray(runtime?.recentEvents)) events = runtime.recentEvents;
   if (!events.length && summary && Array.isArray(summary.recentEvents)) events = summary.recentEvents;
   if (!events.length) return [];
-  return events.slice(-MAX_RECENT_EVENTS2).map(buildEventViewModel);
+  return events.map(buildEventViewModel);
 }
 function lastUsefulEvent(recentEvents) {
   if (!Array.isArray(recentEvents) || !recentEvents.length) return null;
@@ -34412,6 +34439,7 @@ function buildListViewModel(runtime, { now, staleMs }) {
     activeTaskCount,
     lastUsefulEventAt: null,
     stalenessMs,
+    staleThresholdMs: staleMs,
     outputDir: runtime.outputDir || null,
     runs,
     activeTasks,
@@ -34522,6 +34550,7 @@ function collectNextSteps(steps) {
 }
 function statusKey2(status) {
   const text = String(status || "").toLowerCase();
+  if (!text) return "pending";
   if (text === "completed") return "completed";
   if (text === "partial") return "partial";
   if (text === "blocked") return "blocked";
@@ -34529,8 +34558,41 @@ function statusKey2(status) {
   if (text === "skipped") return "skipped";
   if (text === "cancelled") return "cancelled";
   if (text === "timed_out" || text === "timedout") return "timedOut";
-  if (text === "running" || text === "pending") return "partial";
+  if (text === "running") return "running";
+  if (text === "pending") return "pending";
   return "partial";
+}
+function resolveObservability(taskLike, parsed = {}) {
+  const explicit = firstString(taskLike?.observability, parsed?.observability);
+  if (OBSERVABILITY_VALUES.has(explicit)) return explicit;
+  const runtime = firstString(taskLike?.runtime, parsed?.workerRuntime, parsed?.runtime);
+  const dispatcher = firstString(taskLike?.dispatcher, parsed?.dispatcher);
+  if (runtime === "claude" || dispatcher === "scp-claude") return "live";
+  if (runtime === "codex" || dispatcher === "codex-worker") return "summary-only";
+  return void 0;
+}
+function compareActiveTaskView(a, b) {
+  const started = compareTimestampValue(a?.startedAt, b?.startedAt);
+  if (started !== 0) return started;
+  const taskId = compareText(a?.taskId, b?.taskId);
+  if (taskId !== 0) return taskId;
+  return compareText(a?.title, b?.title);
+}
+function compareTimestampValue(a, b) {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  const aMs = Date.parse(a);
+  const bMs = Date.parse(b);
+  if (Number.isFinite(aMs) && Number.isFinite(bMs) && aMs !== bMs) return aMs - bMs;
+  return compareText(a, b);
+}
+function compareText(a, b) {
+  const left = String(a || "");
+  const right = String(b || "");
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
 }
 function mapCheckStatus4(status) {
   const text = String(status || "").toLowerCase();
@@ -35408,8 +35470,16 @@ function summarizeTaskEvents(events, eventLogPath) {
   const summary = summarizeEventList(events, eventLogPath);
   return { ...summary, ...assessHeartbeat(summary) };
 }
-function trimEvent3(event) {
-  return trimEvent2(event);
+function trimEvent3(event, sequence) {
+  const trimmed = trimEvent2(event);
+  if (!trimmed) return trimmed;
+  if (typeof sequence === "number" && Number.isFinite(sequence)) {
+    trimmed.sequence = sequence;
+  }
+  return trimmed;
+}
+function eventTimestamp2(event) {
+  return event?.timestamp || event?.ts;
 }
 function compareTimestamp(a, b) {
   if (a && b) return a < b ? -1 : a > b ? 1 : 0;
@@ -35451,8 +35521,15 @@ async function buildRunEventView(summary, runDir, options = {}) {
     }
     for (const event of events) allEvents.push(event);
   }
-  const sorted = allEvents.slice().sort((a, b) => compareTimestamp(a?.timestamp || a?.ts, b?.timestamp || b?.ts));
-  const recentEvents = sorted.slice(-recentLimit).map(trimEvent3).filter(Boolean);
+  const sorted = allEvents.map((event, index) => ({ event, index })).sort((a, b) => {
+    const timestampOrder = compareTimestamp(eventTimestamp2(a.event), eventTimestamp2(b.event));
+    if (timestampOrder !== 0) return timestampOrder;
+    const taskOrder = compareText2(a.event?.taskId, b.event?.taskId);
+    if (taskOrder !== 0) return taskOrder;
+    return a.index - b.index;
+  });
+  const sequenced = sorted.map((entry, index) => trimEvent3(entry.event, index + 1)).filter(Boolean);
+  const recentEvents = sequenced.slice(-recentLimit);
   return { recentEvents, taskEvents, health: summarizeRunHealth(taskEvents) };
 }
 async function readRunInputFallback(runDir) {
@@ -35523,6 +35600,13 @@ function suggestControllerAction(payload, health = {}) {
   if (health.slowTasks?.length) return "continue_monitoring";
   if (payload.active?.length) return "continue_waiting";
   return "inspect_run_state";
+}
+function compareText2(a, b) {
+  const left = typeof a === "string" ? a : "";
+  const right = typeof b === "string" ? b : "";
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
 }
 function compactWatchPayload(payload, input = {}) {
   return {

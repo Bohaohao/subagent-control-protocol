@@ -21,7 +21,7 @@
       "type": "object",
       "additionalProperties": true,
       "description": "Invariants shared by all three display modes (docs §5). Every mode must honor these regardless of observation distance.",
-      "required": ["dataHonesty", "tokenPresentation", "reducedMotion", "accessibility", "localization", "disconnectedBehavior", "freshnessThresholds"],
+      "required": ["dataHonesty", "observabilityRendering", "tokenPresentation", "reducedMotion", "accessibility", "localization", "disconnectedBehavior", "freshnessThresholds"],
       "properties": {
         "dataHonesty": {
           "type": "object",
@@ -38,7 +38,41 @@
             "renderViewModelDirectly": {
               "type": "boolean",
               "description": "True when the desktop must render the SCP view model directly and never read raw run artifacts."
+            },
+            "defaultGrouping": {
+              "type": "array",
+              "description": "Default high-density grouping order. Modes may allow pivots, but must not force users to infer topology from an ungrouped flat stream.",
+              "items": { "$ref": "#/$defs/groupingKeyEnum" }
+            },
+            "recentEventsWindowSemantics": {
+              "type": "string",
+              "enum": ["bounded-overview-window"],
+              "description": "Meaning of recentEvents in scp.run-view/v1."
+            },
+            "incrementalEventsSemantics": {
+              "type": "string",
+              "enum": ["bounded-incremental-retrieval"],
+              "description": "Meaning of GET /events in the transport contract."
+            },
+            "sseSemantics": {
+              "type": "string",
+              "enum": ["snapshot-sse"],
+              "description": "Meaning of GET /events/stream in the transport contract."
             }
+          }
+        },
+        "observabilityRendering": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Cross-mode rendering rules for live vs summary-only visibility. summary-only is not a failure state and must never be dressed up as live telemetry.",
+          "properties": {
+            "states": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/observabilityModeEnum" }
+            },
+            "summaryOnlyNeverLooksLive": { "type": "boolean" },
+            "summaryOnlyDoesNotCountStaleWithoutHeartbeat": { "type": "boolean" },
+            "unknownRendersConservatively": { "type": "boolean" }
           }
         },
         "tokenPresentation": {
@@ -126,6 +160,15 @@
           "properties": {
             "singleThresholdSource": { "type": "boolean", "description": "Whether staleness thresholds come from one shared source." },
             "staleMs": { "type": "integer", "minimum": 0, "description": "Milliseconds after which a run with no forward progress is considered stale (STALE)." },
+            "thresholdField": {
+              "type": "string",
+              "enum": ["staleThresholdMs"],
+              "description": "Producer field that carries the active stale threshold."
+            },
+            "staleCountsLiveOnly": {
+              "type": "boolean",
+              "description": "Whether heartbeat-only stale classification applies only to observability=live tasks."
+            },
             "fields": {
               "type": "array",
               "items": { "type": "string" },
@@ -250,10 +293,34 @@
       "enum": ["failed", "blocked", "waitingOnUser"],
       "description": "Triggers permitted to raise a peripheral notification (docs §4.1, §8.4)."
     },
+    "groupingKeyEnum": {
+      "type": "string",
+      "enum": ["runtime", "workerType", "status", "observability", "session", "task"],
+      "description": "Supported grouping keys for high-density display strategies."
+    },
+    "observabilityModeEnum": {
+      "type": "string",
+      "enum": ["live", "summary-only", "unknown"],
+      "description": "Visibility contract for a task or node: live = real events/heartbeats may drive the UI; summary-only = only summary/terminal visibility is expected; unknown = conservative fallback."
+    },
     "heroMetricEnum": {
       "type": "string",
       "enum": ["agentsInFlight", "tasksCompletedThisSession", "measuredTokensProcessed"],
       "description": "Hero metrics wallboard v1 may honestly show, limited to three (docs §4.3)."
+    },
+    "heroMetricDescriptor": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "derivedFrom"],
+      "properties": {
+        "id": { "$ref": "#/$defs/heroMetricEnum" },
+        "derivedFrom": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Producer field(s) this hero metric is derived from. The UI must not invent alternate sources."
+        },
+        "notes": { "type": "string" }
+      }
     },
     "deferredCapabilityEnum": {
       "type": "string",
@@ -277,7 +344,12 @@
       "additionalProperties": true,
       "description": "Per-mode notification policy (docs §8.4). right-dock: taskbar/Dock badge count + system notifications restricted to failed/blocked/waiting-on-user + optional subtle sound (default off). workbench: in-app region-level alerts, no system notifications by default, errors degrade a region not the page. wallboard: alert rail + event ticker for high-priority items, no desktop system notifications.",
       "properties": {
-        "badgeCount": { "type": "boolean", "description": "Whether a taskbar/Dock badge count of runs needing attention is shown (right-dock)." },
+        "badgeCount": { "type": "boolean", "description": "Whether a taskbar/Dock badge count is shown (right-dock). The count meaning is attention-needed task count, not run count." },
+        "badgeCountMeaning": {
+          "type": "string",
+          "enum": ["attentionNeededTaskCount"],
+          "description": "Meaning of the badge count."
+        },
         "systemNotifications": { "type": "boolean", "description": "Whether OS/system notifications are enabled. right-dock: true (restricted to notifyOn); workbench/wallboard: false." },
         "inAppRegionAlerts": { "type": "boolean", "description": "Whether in-app region-level alerts are used instead of system notifications (workbench)." },
         "alertRailAndTicker": { "type": "boolean", "description": "Whether an alert rail + event ticker surfaces high-priority items (wallboard)." },
@@ -387,6 +459,19 @@
               "type": "array",
               "items": { "type": "string", "enum": ["startedAt", "durationMs", "tokenUsage", "taskSummary", "risksAndVerification"] }
             }
+          }
+        },
+        "groupingStrategy": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "High-density grouping rules for the dock. Group summary comes before individual task rows.",
+          "properties": {
+            "defaultOrder": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/groupingKeyEnum" }
+            },
+            "summaryBeforeChildren": { "type": "boolean" },
+            "unboundedAutoExpandForbidden": { "type": "boolean" }
           }
         },
         "autoExpandPolicy": {
@@ -509,6 +594,19 @@
             }
           }
         },
+        "taskTable": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Task table behavior under dense concurrency. Virtualization and filtering are part of the contract.",
+          "properties": {
+            "virtualized": { "type": "boolean" },
+            "defaultFilters": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/groupingKeyEnum" }
+            },
+            "selectionIndependentOfWireOrder": { "type": "boolean" }
+          }
+        },
         "copyStyle": {
           "type": "object",
           "additionalProperties": true,
@@ -601,6 +699,7 @@
           "properties": {
             "commandBarPct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Top command bar band, % of viewport height (~7%)." },
             "heroMetricsBandPct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Top hero metrics band, % of viewport height (~15%)." },
+            "bodyBandPct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Middle body band, % of viewport height (~74%)." },
             "bodyRow": {
               "type": "object",
               "additionalProperties": true,
@@ -616,8 +715,22 @@
         },
         "heroMetrics": {
           "type": "array",
-          "description": "Hero metrics, kept to three honest, contract-derivable values (docs §4.3).",
-          "items": { "$ref": "#/$defs/heroMetricEnum" }
+          "description": "Hero metrics, kept to three honest, contract-derivable values (docs §4.3). Each metric must declare provenance / derivedFrom.",
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/heroMetricDescriptor" }
+        },
+        "densityScaling": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Concurrency-agnostic density rules. Degradation is driven by viewport and data density, not a hard-coded task count.",
+          "properties": {
+            "primaryGrouping": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/groupingKeyEnum" }
+            },
+            "clusterBeforeDroppingDetail": { "type": "boolean" },
+            "summaryOnlyNeverAnimatesAsLive": { "type": "boolean" }
+          }
         },
         "motionSystem": {
           "type": "object",
@@ -699,8 +812,24 @@
           "properties": {
             "targetFps": { "type": "integer", "minimum": 0, "description": "Target frames per second under long runs (60)." },
             "degradedFps": { "type": "integer", "minimum": 0, "description": "Acceptable fps after degradation (30)." },
-            "agentClusteringThreshold": { "type": "boolean", "description": "Whether an agent-count clustering threshold must be defined." },
-            "canvasNodeOrParticleCap": { "type": "boolean", "description": "Whether a canvas node/particle cap must be defined." },
+            "agentClusteringThreshold": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Density-driven clustering thresholds that do not assume a single fixed concurrency target.",
+              "properties": {
+                "maxUnclusteredAgents": { "type": "integer", "minimum": 0 },
+                "viewportDensityTrigger": { "type": "number", "minimum": 0 }
+              }
+            },
+            "canvasNodeOrParticleCap": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Hard cap for canvas-rendered nodes/particles before further degradation is required.",
+              "properties": {
+                "maxNodes": { "type": "integer", "minimum": 0 },
+                "maxParticles": { "type": "integer", "minimum": 0 }
+              }
+            },
             "longRunMemoryLeakMonitoring": { "type": "boolean", "description": "Whether a long-run memory-leak monitoring plan must exist." }
           }
         },

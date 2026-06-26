@@ -21,9 +21,9 @@
 
 const DEFAULT_STALE_MS = 120_000
 const SNIPPET_LIMIT = 200
-const MAX_RECENT_EVENTS = 12
 const MAX_RISKS = 8
 const MAX_NEXT_ACTIONS = 10
+const OBSERVABILITY_VALUES = new Set(['live', 'summary-only'])
 
 // Event types that indicate real forward progress for a human watching a run.
 // Used to pick `lastUsefulEventAt` — the most recent timestamp a viewer would
@@ -57,7 +57,7 @@ export function buildRunViewModel(input, options = {}) {
   const recentEvents = collectRecentEvents(runtime, summary)
   const tokenEvidence = summarizeTokenEvidence({ summary, tasks })
   const health = buildHealth(summary, runtime, counts, { now, staleMs })
-  const activeTasks = collectActive(runtime)
+  const activeTasks = collectActive(runtime, tasks)
   const lastEvent = lastUsefulEvent(recentEvents)
   const running = status === 'running' || phase === 'in_progress'
   const display = buildDisplayFields({
@@ -78,6 +78,7 @@ export function buildRunViewModel(input, options = {}) {
     activeTaskCount: display.activeTaskCount,
     lastUsefulEventAt: display.lastUsefulEventAt,
     stalenessMs: display.stalenessMs,
+    staleThresholdMs: staleMs,
     counts,
     tasks: taskViewModels,
     activeTasks,
@@ -136,6 +137,7 @@ export function buildTaskViewModel(input) {
     workerType: firstString(task.workerType, parsed.workerType),
     workerAlias: firstString(task.workerAlias, parsed.workerAlias),
     fallbackApplied: firstBoolean(task.fallbackApplied, parsed.fallbackApplied),
+    observability: resolveObservability(task, parsed),
   }
 
   return pruneUndefined(out)
@@ -312,7 +314,18 @@ function collectTasks(summary, runtime) {
 // ---------------------------------------------------------------------------
 
 function countTasks(summary, tasks) {
-  const empty = { total: 0, completed: 0, partial: 0, blocked: 0, failed: 0, skipped: 0, cancelled: 0, timedOut: 0 }
+  const empty = {
+    total: 0,
+    completed: 0,
+    partial: 0,
+    blocked: 0,
+    failed: 0,
+    skipped: 0,
+    cancelled: 0,
+    timedOut: 0,
+    running: 0,
+    pending: 0,
+  }
   if (summary && typeof summary.totalTasks === 'number') {
     return {
       total: summary.totalTasks,
@@ -323,6 +336,8 @@ function countTasks(summary, tasks) {
       skipped: num(summary.skippedTasks),
       cancelled: num(summary.cancelledTasks),
       timedOut: num(summary.timedOutTasks),
+      running: num(summary.runningTasks),
+      pending: num(summary.pendingTasks),
     }
   }
   for (const task of tasks) {
@@ -339,6 +354,7 @@ function resolveStatus(summary, runtime, counts) {
   if (runtime?.done === false) return 'running'
   if (summary && typeof summary.status === 'string') return normalizeRunStatus(summary.status)
   if (summary?.error) return 'failed'
+  if (counts.running > 0 || counts.pending > 0) return 'running'
   if (counts.cancelled > 0) return 'cancelled'
   if (counts.failed > 0 || counts.timedOut > 0) return 'failed'
   if (counts.blocked > 0) return 'blocked'
@@ -353,9 +369,12 @@ function resolveStatus(summary, runtime, counts) {
 // failures/timeouts. `unknown` when there is nothing to say yet.
 function buildHealth(summary, runtime, counts, { now, staleMs }) {
   const failed = counts.failed + counts.timedOut
-  const running = runtime?.done === false || (summary && !summary.endedAt && counts.total > 0 && counts.completed + counts.partial < counts.total)
+  const running = runtime?.done === false
+    || counts.running > 0
+    || counts.pending > 0
+    || (summary && !summary.endedAt && counts.total > 0 && counts.completed + counts.partial < counts.total)
   const active = Array.isArray(runtime?.active) ? runtime.active : []
-  const staleCount = countStale(active, runtime?.taskEvents, { now, staleMs })
+  const staleCount = countStale(collectActive(runtime, collectTasks(summary, runtime)), runtime?.taskEvents, { now, staleMs })
 
   let level
   if (failed > 0) level = 'error'
@@ -385,6 +404,7 @@ function countStale(active, taskEvents, { now, staleMs }) {
   let stale = 0
   for (const record of active) {
     if (!record || !record.taskId) continue
+    if (record.observability !== 'live') continue
     const events = eventMap.get(record.taskId) || {}
     const reference = events.lastHeartbeatAt || events.lastEventAt || record.lastHeartbeatAt || record.lastEventAt
     if (!reference) { stale += 1; continue }
@@ -398,8 +418,12 @@ function countStale(active, taskEvents, { now, staleMs }) {
 // Active tasks + recent events
 // ---------------------------------------------------------------------------
 
-function collectActive(runtime) {
+function collectActive(runtime, tasks = []) {
   if (!Array.isArray(runtime?.active)) return []
+  const metadata = new Map()
+  for (const task of tasks) {
+    if (task?.id) metadata.set(task.id, task)
+  }
   return runtime.active
     .filter((record) => record && record.taskId)
     .map((record) => pruneUndefined({
@@ -411,7 +435,14 @@ function collectActive(runtime) {
       lastHeartbeatAt: record.lastHeartbeatAt || undefined,
       phase: record.phase || undefined,
       eventLogPath: record.eventLogPath || undefined,
+      runtime: firstString(record.runtime, metadata.get(record.taskId)?.runtime, metadata.get(record.taskId)?.parsed?.workerRuntime, metadata.get(record.taskId)?.parsed?.runtime),
+      dispatcher: firstString(record.dispatcher, metadata.get(record.taskId)?.dispatcher, metadata.get(record.taskId)?.parsed?.dispatcher),
+      workerType: firstString(record.workerType, metadata.get(record.taskId)?.workerType, metadata.get(record.taskId)?.parsed?.workerType),
+      workerAlias: firstString(record.workerAlias, metadata.get(record.taskId)?.workerAlias, metadata.get(record.taskId)?.parsed?.workerAlias),
+      fallbackApplied: firstBoolean(record.fallbackApplied, metadata.get(record.taskId)?.fallbackApplied, metadata.get(record.taskId)?.parsed?.fallbackApplied),
+      observability: resolveObservability(record, metadata.get(record.taskId)?.parsed || metadata.get(record.taskId)),
     }))
+    .sort(compareActiveTaskView)
 }
 
 function collectRecentEvents(runtime, summary) {
@@ -419,7 +450,7 @@ function collectRecentEvents(runtime, summary) {
   if (Array.isArray(runtime?.recentEvents)) events = runtime.recentEvents
   if (!events.length && summary && Array.isArray(summary.recentEvents)) events = summary.recentEvents
   if (!events.length) return []
-  return events.slice(-MAX_RECENT_EVENTS).map(buildEventViewModel)
+  return events.map(buildEventViewModel)
 }
 
 // ---------------------------------------------------------------------------
@@ -591,6 +622,7 @@ function buildListViewModel(runtime, { now, staleMs }) {
     activeTaskCount,
     lastUsefulEventAt: null,
     stalenessMs,
+    staleThresholdMs: staleMs,
     outputDir: runtime.outputDir || null,
     runs,
     activeTasks,
@@ -717,6 +749,7 @@ function collectNextSteps(steps) {
 
 function statusKey(status) {
   const text = String(status || '').toLowerCase()
+  if (!text) return 'pending'
   if (text === 'completed') return 'completed'
   if (text === 'partial') return 'partial'
   if (text === 'blocked') return 'blocked'
@@ -724,8 +757,45 @@ function statusKey(status) {
   if (text === 'skipped') return 'skipped'
   if (text === 'cancelled') return 'cancelled'
   if (text === 'timed_out' || text === 'timedout') return 'timedOut'
-  if (text === 'running' || text === 'pending') return 'partial'
+  if (text === 'running') return 'running'
+  if (text === 'pending') return 'pending'
   return 'partial'
+}
+
+function resolveObservability(taskLike, parsed = {}) {
+  const explicit = firstString(taskLike?.observability, parsed?.observability)
+  if (OBSERVABILITY_VALUES.has(explicit)) return explicit
+  const runtime = firstString(taskLike?.runtime, parsed?.workerRuntime, parsed?.runtime)
+  const dispatcher = firstString(taskLike?.dispatcher, parsed?.dispatcher)
+  if (runtime === 'claude' || dispatcher === 'scp-claude') return 'live'
+  if (runtime === 'codex' || dispatcher === 'codex-worker') return 'summary-only'
+  return undefined
+}
+
+function compareActiveTaskView(a, b) {
+  const started = compareTimestampValue(a?.startedAt, b?.startedAt)
+  if (started !== 0) return started
+  const taskId = compareText(a?.taskId, b?.taskId)
+  if (taskId !== 0) return taskId
+  return compareText(a?.title, b?.title)
+}
+
+function compareTimestampValue(a, b) {
+  if (!a && !b) return 0
+  if (!a) return 1
+  if (!b) return -1
+  const aMs = Date.parse(a)
+  const bMs = Date.parse(b)
+  if (Number.isFinite(aMs) && Number.isFinite(bMs) && aMs !== bMs) return aMs - bMs
+  return compareText(a, b)
+}
+
+function compareText(a, b) {
+  const left = String(a || '')
+  const right = String(b || '')
+  if (left < right) return -1
+  if (left > right) return 1
+  return 0
 }
 
 function mapCheckStatus(status) {

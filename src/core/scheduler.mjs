@@ -684,8 +684,13 @@ function summarizeTaskEvents(events, eventLogPath) {
 
 // Trim an event down to a small whitelist of fields so recentEvents doesn't
 // echo large payloads back to the caller.
-function trimEvent(event) {
-  return trimProtocolEvent(event)
+function trimEvent(event, sequence) {
+  const trimmed = trimProtocolEvent(event)
+  if (!trimmed) return trimmed
+  if (typeof sequence === 'number' && Number.isFinite(sequence)) {
+    trimmed.sequence = sequence
+  }
+  return trimmed
 }
 
 function eventTimestamp(event) {
@@ -742,9 +747,18 @@ async function buildRunEventView(summary, runDir, options = {}) {
   }
 
   const sorted = allEvents
-    .slice()
-    .sort((a, b) => compareTimestamp(a?.timestamp || a?.ts, b?.timestamp || b?.ts))
-  const recentEvents = sorted.slice(-recentLimit).map(trimEvent).filter(Boolean)
+    .map((event, index) => ({ event, index }))
+    .sort((a, b) => {
+      const timestampOrder = compareTimestamp(eventTimestamp(a.event), eventTimestamp(b.event))
+      if (timestampOrder !== 0) return timestampOrder
+      const taskOrder = compareText(a.event?.taskId, b.event?.taskId)
+      if (taskOrder !== 0) return taskOrder
+      return a.index - b.index
+    })
+  const sequenced = sorted
+    .map((entry, index) => trimEvent(entry.event, index + 1))
+    .filter(Boolean)
+  const recentEvents = sequenced.slice(-recentLimit)
   return { recentEvents, taskEvents, health: summarizeRunHealth(taskEvents) }
 }
 
@@ -825,6 +839,14 @@ function suggestControllerAction(payload, health = {}) {
   if (health.slowTasks?.length) return 'continue_monitoring'
   if (payload.active?.length) return 'continue_waiting'
   return 'inspect_run_state'
+}
+
+function compareText(a, b) {
+  const left = typeof a === 'string' ? a : ''
+  const right = typeof b === 'string' ? b : ''
+  if (left < right) return -1
+  if (left > right) return 1
+  return 0
 }
 
 function compactWatchPayload(payload, input = {}) {

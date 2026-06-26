@@ -302,6 +302,12 @@ GET /events?runId=2026-06-25T09-29-50-967Z&since=2026-06-25T09%3A42%3A00.000Z&li
 
 ### 5.5 GET /events/stream
 
+语义补充（`/events` 与 `recentEvents`）：
+
+- `recentEvents`（`scp.run-view/v1` 顶层字段）是 **bounded overview window**，用于 run snapshot 的“最近发生了什么”概览。
+- `/events` 是 **bounded incremental retrieval**，用于桌面端按 cursor 拉增量；它不是 raw event log 导出接口。
+- `recentEvents[].sequence` 在桌面端桥接层表示 **run-global monotonic cursor**：它作用于“合并后的 run 事件流”，不是 task-local heartbeat 序号。
+
 SSE 实时流。bridge 会先发一个注释：
 
 ```text
@@ -348,10 +354,12 @@ keep-alive：
 | `activeTaskCount` | 运行中的子任务数 |
 | `lastUsefulEventAt` | 最近有效进展时间 |
 | `stalenessMs` | 距离最近进展的毫秒数 |
+| `staleThresholdMs` | 当前 snapshot 使用的 stale 判定阈值（毫秒） |
 | `health.level` | 总体健康状态 |
 | `counts` | 任务结果统计 |
 | `runs[]` | list mode 的 run 列表 |
 | `tasks[]` | run mode 的任务详情 |
+| `activeTasks[]` | 进行中的任务视图，遵循 `activeTaskView` 契约，稳定排序 |
 | `recentEvents[]` | 有界事件尾巴 |
 | `tokenEvidence` | 实测 token/cost 证据 |
 
@@ -360,6 +368,12 @@ keep-alive：
 ```text
 running | completed | failed | blocked | cancelled | partial | skipped | list | unknown
 ```
+
+`counts` 语义补充：
+
+- `running` / `pending` 是进行态统计，不属于 `partial`。
+- `partial` 只表示“部分完成 / 部分可信的终态”。
+- 桌面端不得把 `running`、`pending` 当成 `partial` 去做展示文案或健康推断。
 
 色调枚举：
 
@@ -452,6 +466,25 @@ export interface ScpHealth {
   blockedCount?: number
 }
 
+export type ScpObservability = 'live' | 'summary-only'
+
+export interface ScpActiveTaskView {
+  taskId?: string | null
+  title?: string | null
+  pid?: number | null
+  startedAt?: string | null
+  lastEventAt?: string | null
+  lastHeartbeatAt?: string | null
+  phase?: string | null
+  eventLogPath?: string | null
+  runtime?: 'claude' | 'codex' | null
+  dispatcher?: 'scp-claude' | 'codex-worker' | null
+  workerType?: string | null
+  workerAlias?: string | null
+  fallbackApplied?: boolean | null
+  observability?: ScpObservability | null
+}
+
 export interface ScpEventView {
   schema: 'scp.event-view/v1'
   type?: string | null
@@ -482,11 +515,12 @@ export interface ScpRunView {
   activeTaskCount: number
   lastUsefulEventAt?: string | null
   stalenessMs?: number | null
+  staleThresholdMs?: number | null
   counts?: Record<string, number>
   health?: ScpHealth
   runs?: Array<Record<string, unknown>>
   tasks?: Array<Record<string, unknown>>
-  activeTasks?: Array<Record<string, unknown>>
+  activeTasks?: ScpActiveTaskView[]
   recentEvents?: ScpEventView[]
   tokenEvidence?: Record<string, unknown>
   artifacts?: Record<string, unknown>
@@ -595,9 +629,9 @@ npm run smoke:desktop-bridge
 
 本节描述当一次 run 同时包含 Claude subagent 任务和 Codex worker 任务时，桌面端如何区分与展示二者。新增的字段都是**可选**的，仅为提升 worker 维度的可见性，不改变 §1–§14 已建立的契约，也不破坏既有 `scp.run-view/v1` 消费者。
 
-### 15.1 新增 taskView 可选字段
+### 15.1 新增 taskView / activeTaskView 可选字段
 
-在 `scp.run-view/v1` 的 `taskView`（`schemas/desktop-status.schema.json` 的 `#/$defs/taskView`）中新增以下可选字段。它们都允许 `null`，且**允许整体缺失**：
+在 `scp.run-view/v1` 的 `taskView`（`schemas/desktop-status.schema.json` 的 `#/$defs/taskView`）以及 `activeTaskView`（`#/$defs/activeTaskView`）中新增以下可选字段。它们都允许 `null`，且**允许整体缺失**：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -606,12 +640,14 @@ npm run smoke:desktop-bridge
 | `workerType` | `string` \| `null` | 解析后的 worker/agent 类型，如 `huoshan-worker`、`zhipu-worker`、`normal-worker`，或 Claude 任务角色。对 SCP 透明。 |
 | `workerAlias` | `string` \| `null` | 用户侧原始别名/昵称，如 `huoshan`、`zhipu`；当用户直接写 `xxx-worker` 时可与 `workerType` 相同。对 SCP 透明。 |
 | `fallbackApplied` | `boolean` \| `null` | `true` 表示 Codex worker 解析时发生了 worker fallback（如 `zhipu-worker` 缺失后使用 `normal-worker`）。它不表示 UI 展示降级。 |
+| `observability` | `"live"` \| `"summary-only"` \| `null` | `live` = 有真实 live events / heartbeat 可跟踪；`summary-only` = 只能观察摘要/终态。`summary-only` 不是失败，也不能因为没有 heartbeat 就被当成 stale。 |
 
 消费者契约：
 
 - 这些字段全部可选，消费者**必须容忍缺失或为 `null`**。字段缺失**不代表** `runtime="claude"`，也不得据此反推；缺失只意味着未知/不适用。
 - 不得因为出现这些字段而改变对 `schema`、`status`、`counts`、`health` 等既有字段的解读。
 - `runtime` 与 `dispatcher` 仅描述任务执行与派发来源，不承诺任何调度拓扑、父子关系或 handoff 边（见 §14.3）。
+- `activeTasks[]` 不再是 undocumented object[]；它遵循 `activeTaskView` 契约，producer 必须稳定排序，避免 snapshot 间无意义抖动。
 
 ### 15.2 Claude 任务保持完整可见
 
@@ -619,6 +655,7 @@ npm run smoke:desktop-bridge
 
 - 完整的心跳（heartbeat）、checkpoint、phase/task 转换、`commandsRun`、`verification`、`recentEvents` 增量窗口。
 - `lastUsefulEventAt` / `stalenessMs` 可正常计算，桌面端可按 §5.4、§5.5 做 live 更新。
+- `observability` 应为 `live`（显式提供时）或保持缺失/`null` 但语义上仍按 live 处理。
 - 这些任务的展示行为与 §1–§13 完全一致，`fallbackApplied` 应为 `false` 或 `null`。
 
 ### 15.3 Codex worker 任务可能是摘要/终态
@@ -627,15 +664,29 @@ npm run smoke:desktop-bridge
 
 - 可能只有 `status`、`displayStatus`、`startedAt`/`endedAt`、`durationMs`、`filesChanged`、`tokenEvidence` 等终态字段，缺少细粒度 heartbeat/event 增量。
 - `recentEvents` 可能为空或只有终止事件；`lastUsefulEventAt` 可能等于 `endedAt`，`stalenessMs` 在该任务终态后不再有进展意义。
+- `observability` 应为 `summary-only`（显式提供时）或保持缺失/`null` 但按 summary-only 边界对待。
 - 桌面端应在 UI 上区分“live 跟踪中”与“摘要/终态”两种呈现，但**不得伪造**缺失的 live 事件或心跳（遵守 §14.3 的真实性优先原则）。这类展示降级不能写入 `fallbackApplied`；该字段只描述 worker alias fallback。
 - Codex worker 任务的 live 可见性取决于 host 是否暴露事件，本契约不承诺其一定可 live 跟踪。
 
-### 15.4 桌面端只读，不得派发/取消 Codex worker
+### 15.4 freshness / stale 语义
+
+- 顶层 `staleThresholdMs` 是 run-view producer 给出的统一 stale 判定阈值。
+- `health.staleCount` 只统计 `observability="live"` 的 active task。
+- `summary-only` task 即使没有 heartbeat / lastEventAt，也不能仅凭这一点进入 stale / stalled 统计。
+- `stalenessMs` 对 live task 是 freshness 信号；对 summary-only task 不代表 live 健康度。
+
+### 15.5 `counts` 与 `sequence` 语义补充
+
+- `counts.running`、`counts.pending` 与 `counts.partial` 必须分离；桌面端不得把进行态混入 partial。
+- `recentEvents[].sequence` 是 **run-global monotonic cursor**，作用于“合并后的 run 事件流”。
+- `/events?afterSequence=` 与 SSE 增量消费都基于这个 run-global cursor，不基于 task-local heartbeat 序号。
+
+### 15.6 桌面端只读，不得派发/取消 Codex worker
 
 - 桌面端仍是 **只读观察者**（见 §1、§7）。即使现在能区分 Codex worker 任务，桌面端**不得**派发、重试、取消或清理 Codex worker，也不得写 `.subagent-runs/` 或任何 run artifact。
 - bridge 只有 `GET`，无写接口；dispatch/cancel/cleanup 一律由 Codex/SCP 总控通过 MCP 工具执行。`runtime`/`dispatcher` 等字段仅用于展示分层，不授予桌面端任何控制权。
 
-### 15.5 关于 SCP runtime 与 Codex worker 的关系
+### 15.7 关于 SCP runtime 与 Codex worker 的关系
 
 - `dispatcher="scp-claude"` 明确表示任务由 SCP Node MCP runtime 派发为 Claude subagent。
 - `dispatcher="codex-worker"` 表示任务作为 Codex worker 派发。**本契约不声称 SCP Node MCP runtime 直接 spawn Codex worker**；Codex worker 的实际启动与生命周期由 Codex 侧负责，SCP 视图模型只消费其可观测的摘要/终态结果。

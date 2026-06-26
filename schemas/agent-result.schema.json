@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-result.schema.json",
-  "title": "Claude subagent result",
+  "title": "Agent result",
+  "description": "Structured result returned by a Claude subagent or a Codex worker. Claude results may omit worker identity fields; Codex worker results should include workerRuntime and workerType.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -101,6 +102,31 @@
         "tokensTotal": { "type": "number" },
         "costUsd": { "type": "number" }
       }
+    },
+    "workerRuntime": {
+      "type": "string",
+      "enum": ["claude", "codex"],
+      "description": "Optional runtime identity. Codex workers should set this to 'codex'; Claude subagents may omit it or set 'claude'."
+    },
+    "workerType": {
+      "type": "string",
+      "description": "Optional resolved worker type, such as 'huoshan-worker', 'zhipu-worker', 'normal-worker', or a Claude task role."
+    },
+    "workerAlias": {
+      "type": "string",
+      "description": "Optional user-facing alias or nickname that resolved to workerType, such as 'huoshan'."
+    },
+    "fallbackApplied": {
+      "type": "boolean",
+      "description": "Optional. True when a requested Codex worker alias fell back to another worker type, for example zhipu-worker -> normal-worker."
+    },
+    "plainTextResult": {
+      "type": "string",
+      "description": "Optional controller-preserved text when a worker could not produce fully structured JSON."
+    },
+    "normalizationFailed": {
+      "type": "boolean",
+      "description": "Optional. True when the controller had to preserve a non-conforming result instead of fully normalizing it."
     }
   }
 }

@@ -1,8 +1,10 @@
 # Subagent protocol
 
-This kit treats Codex as the controller and Claude Code CLI as a bounded
-subagent executor. Each subagent task must return the same JSON shape, so the
-controller can merge results without reading free-form prose.
+This kit treats Codex as the controller. Claude Code CLI is the bounded executor
+for the `claude` runtime through SCP MCP tools, while named Codex workers are
+host-spawned by Codex for non-`claude` branches. Each worker task must return the
+same base JSON shape, so the controller can merge results without reading
+free-form prose.
 
 ## Core rules
 
@@ -32,6 +34,16 @@ The result must match `schemas/agent-result.schema.json`:
 - `tokenUsageSummary`: Claude-authored note about token visibility; it must not
   invent exact counts
 - `metrics`: optional token/cost fields when available
+
+Codex worker final messages use the same base shape and should also include
+worker identity fields when available:
+
+- `workerRuntime`: `codex`
+- `workerType`: resolved worker type such as `huoshan-worker`, `zhipu-worker`,
+  or `normal-worker`
+- `workerAlias`: optional user-facing alias such as `huoshan`
+- `fallbackApplied`: optional boolean, `true` when a requested worker fell back
+  to another worker type
 
 The controller wraps each task with measured process metadata. Top-level task
 status may also be `skipped`, `timed_out`, or `cancelled`. When the Claude CLI
@@ -88,6 +100,78 @@ not improvised after the fact.
 
 This workflow supersedes ad-hoc decomposition. If no `todoList` exists, the
 controller is not ready to dispatch.
+
+## Mixed worker channels (Claude + Codex workers)
+
+The controller may run a plan that mixes **Claude subagents** and **Codex
+workers**. The two channels are disjoint; the controller is the only component
+that spans them. The rules in this section are normative.
+
+### Channels
+
+1. **Claude channel.** Claude subagents execute through the SCP MCP runtime
+   (`subagent_run_task`, `subagent_run_many`, `subagent_start`). Results are the
+   MCP envelope: `runSummary`, `results`, and `measuredUsageSummary`. The Claude
+   runner path is unchanged by the addition of Codex workers.
+2. **Codex worker channel.** Codex workers are spawned by the Codex host via
+   `multi_agent_v1.spawn_agent`. The SCP Node MCP runtime MUST NOT spawn Codex
+   workers directly. The controller waits on each worker with `wait_agent` and
+   reads its final message as the result.
+3. **Single ownership.** The controller owns exactly one `todoList` and one
+   `dispatchLedger`. Both channels consume the same `todoList`. The
+   `dispatchLedger` records, per todo: the channel (`claude` |
+   `codex-worker`), the resolved worker name, the spawn handle or run locator,
+   and the status. It is the reconciliation surface between the two channels.
+
+### Worker alias resolution & fallback
+
+Before spawning a Codex worker, the controller resolves the requested name:
+
+- `huoshan` → `huoshan-worker`
+- `zhipu` → `zhipu-worker`
+- A name already ending in `-worker` (an exact `xxx-worker`) is used as-is.
+- A worker that cannot be found falls back to `normal-worker`.
+- If `normal-worker` is also missing, the branch is **blocked**. The controller
+  records `blocked` in the `dispatchLedger` with the reason and does not execute
+  that todo.
+- The controller MUST NOT fall back to the Codex default agent. Resolution
+  either yields a concrete `-worker` name or blocks — never a silent default.
+
+### Result reading & compatibility
+
+- Claude results are read from the MCP envelope (`runSummary`, `results`,
+  `measuredUsageSummary`).
+- Codex worker results are read from the `wait_agent` final message. The
+  controller MUST prompt each Codex worker to return JSON matching the SCP
+  result contract (the same base shape Claude returns) plus `workerRuntime:
+  "codex"`, the resolved `workerType`, optional `workerAlias`, and optional
+  `fallbackApplied`. A worker whose final message lacks required fields may be
+  sent a single `send_input` follow-up to request the missing fields; after that
+  one follow-up the controller accepts the worker's reply as final and does not
+  retry.
+- **429 auto-continue (Codex workers only).** This recovery rule applies only to
+  Codex workers; the Claude/SCP runner path is unchanged. When a Codex worker's
+  `wait_agent` final status or final message clearly indicates a 429 /
+  rate-limit condition, the controller sends `继续` to that worker and retries
+  collection. The controller MUST make at most 3 such auto-continue attempts per
+  worker; after the third it accepts the worker's last reply as final. This is
+  separate from the one-time `send_input` repair above, and the two limits are
+  independent. If the final status or final message is ambiguous, the controller
+  does not auto-continue. Support is final-message / final-status based only — the
+  controller does not promise mid-run 429 interception, and a 429 that does not
+  surface in the `wait_agent` final status or final message is not
+  auto-continued. The controller's final summary MUST state whether
+  auto-continue happened for a worker and whether it recovered.
+- The controller normalizes both channels into the same result shape before
+  integration, so `filesChanged`, `commandsRun`, `verification`, `risks`, and
+  `tokenUsageSummary` are comparable across channels.
+
+### Compatibility (hard)
+
+- No change to the Claude runner path.
+- The SCP Node MCP runtime does not spawn Codex workers. Codex workers are
+  host-spawned (`multi_agent_v1.spawn_agent`); SCP participates only as the
+  Claude channel and as the shared result contract.
 
 ## Event, health, and cleanup protocol
 

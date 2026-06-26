@@ -554,3 +554,89 @@ npm run smoke:desktop-bridge
 - 验证非 loopback 默认拒绝。
 
 桌面端新实现至少要通过同等行为。
+
+## 14. 传输契约与展示契约的边界
+
+本文前面各节描述的是**传输/渲染载荷契约**：桌面端如何发现 bridge、如何拉取数据、如何渲染 `scp.run-view/v1`。除此之外，桌面端还涉及另一类独立的**展示行为契约**：界面有哪几种观察模式、每种模式的信息架构与降级规则、token 真实性等 UX 不变量。两者必须区分清楚，不要把展示行为约定塞回传输 schema，也不要把传输字段当成展示规范。
+
+### 14.1 传输 / 渲染载荷契约
+
+负责“数据怎么来、长什么样”。这一层的规范来源就是本 handoff 文档自身（§1–§13）：bridge 发现、HTTP endpoints、SSE 流、轮询降级、错误分级、TS 类型。传输层消费的视图模型由主插件定义：
+
+- `agent-orchestration-kit/schemas/desktop-status.schema.json`
+- 对应的视图模型标识 `scp.run-view/v1`（以及 `scp.event-view/v1`、`scp.token-evidence/v1`、`scp.bridge-discovery/v1`、`scp.bridge-health/v1`、`scp.bridge-events/v1` 等传输层标识）
+
+这套视图模型由主插件 `buildRunViewModel()` 产出，是桌面端唯一可信的数据来源。它只保证字段形状和 redacted 边界，不规定桌面端如何排版、如何分模式、如何降级——后者属于 §14.2 的展示行为契约。
+
+### 14.2 展示行为 / 模式 / UX 不变量契约
+
+负责“界面怎么表现、有哪些模式、什么是真”。这一层的规范来源是主插件侧的 `desktop-display-contracts` 契约，不是桌面端仓库里的设计稿：
+
+- 规范契约（normative，唯一行为准绳）：`agent-orchestration-kit/docs/desktop-display-contracts.md`，契约标识 `scp.desktop-display-contracts/v1`。
+- 机器可校验镜像：`agent-orchestration-kit/schemas/desktop-display-contracts.schema.json`。
+- 桌面端编译期类型镜像：`subagent-monitor-desktop/src/types/displayContracts.ts`。
+- 设计来源（non-normative，仅设计理由与布局指引）：`subagent-monitor-desktop/docs/display-modes-design.md`。当设计稿与契约冲突时，以契约为准。
+
+三种观察模式的**规范机器 ID** 为 `right-dock`（Side Monitor，右侧伴随）、`workbench`（Workbench，主工作台，默认主模式）、`wallboard`（Wallboard，大屏）。“Mode 1 / Mode 2 / Mode 3” 只是设计稿里的别名，配置、telemetry、schema、TS 类型中一律使用上述规范 ID。各模式的信息架构、共存规则、空态/失联态、reduced motion、token 真实性等 UX 不变量均以上述契约文件为准；本 handoff 文档只负责把数据送到，不重复定义展示行为。
+
+### 14.3 wallboard v2 不得在 v1 伪造
+
+`display-modes-design.md` 已明确 Mode 3 拆为两层：
+
+- **v1**：基于现有 `scp.run-view/v1` 契约可落地的真实 wallboard（活跃 agent 数、session clusters、事件脉搏、保守的累积 token 计数）。
+- **v2**：需要主插件在未来扩充 runtime schema 后才能做完整的 conductor / handoff 叙事，包括调度边、handoff 边、attempt/retry 计数、token throughput window、明确的 parent/child/dependency relation。
+
+在 v2 所需字段未进入 `desktop-status.schema.json` 之前，`Conductor Sweep`、`Handoff Ribbon`、`Token River` 等只能做成视觉猜测，违背“真实性优先”原则。因此：
+
+- v1 不得伪造 agent-to-agent handoff 边、controller-to-agent 拓扑、retry churn vs productive output 区分、原生 token 流速。
+- 这些内容属于 v2，依赖主插件 schema 扩展，桌面端不要在 v1 里用合成数据假装存在。
+
+## 15. 混合 Claude + Codex worker 可见性
+
+本节描述当一次 run 同时包含 Claude subagent 任务和 Codex worker 任务时，桌面端如何区分与展示二者。新增的字段都是**可选**的，仅为提升 worker 维度的可见性，不改变 §1–§14 已建立的契约，也不破坏既有 `scp.run-view/v1` 消费者。
+
+### 15.1 新增 taskView 可选字段
+
+在 `scp.run-view/v1` 的 `taskView`（`schemas/desktop-status.schema.json` 的 `#/$defs/taskView`）中新增以下可选字段。它们都允许 `null`，且**允许整体缺失**：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `runtime` | `"claude"` \| `"codex"` \| `null` | 该任务由哪个 agent runtime 执行。`claude` = 通过 SCP 心跳/事件驱动的 Claude subagent；`codex` = Codex worker 任务。 |
+| `dispatcher` | `"scp-claude"` \| `"codex-worker"` \| `null` | 任务的派发来源。`scp-claude` = 由 SCP Node MCP runtime 派发为 Claude subagent；`codex-worker` = 作为 Codex worker 派发。 |
+| `workerType` | `string` \| `null` | 解析后的 worker/agent 类型，如 `huoshan-worker`、`zhipu-worker`、`normal-worker`，或 Claude 任务角色。对 SCP 透明。 |
+| `workerAlias` | `string` \| `null` | 用户侧原始别名/昵称，如 `huoshan`、`zhipu`；当用户直接写 `xxx-worker` 时可与 `workerType` 相同。对 SCP 透明。 |
+| `fallbackApplied` | `boolean` \| `null` | `true` 表示 Codex worker 解析时发生了 worker fallback（如 `zhipu-worker` 缺失后使用 `normal-worker`）。它不表示 UI 展示降级。 |
+
+消费者契约：
+
+- 这些字段全部可选，消费者**必须容忍缺失或为 `null`**。字段缺失**不代表** `runtime="claude"`，也不得据此反推；缺失只意味着未知/不适用。
+- 不得因为出现这些字段而改变对 `schema`、`status`、`counts`、`health` 等既有字段的解读。
+- `runtime` 与 `dispatcher` 仅描述任务执行与派发来源，不承诺任何调度拓扑、父子关系或 handoff 边（见 §14.3）。
+
+### 15.2 Claude 任务保持完整可见
+
+`runtime="claude"` / `dispatcher="scp-claude"` 的任务保持 SCP 原有的完整可见性：
+
+- 完整的心跳（heartbeat）、checkpoint、phase/task 转换、`commandsRun`、`verification`、`recentEvents` 增量窗口。
+- `lastUsefulEventAt` / `stalenessMs` 可正常计算，桌面端可按 §5.4、§5.5 做 live 更新。
+- 这些任务的展示行为与 §1–§13 完全一致，`fallbackApplied` 应为 `false` 或 `null`。
+
+### 15.3 Codex worker 任务可能是摘要/终态
+
+`runtime="codex"` / `dispatcher="codex-worker"` 的任务，**除非 host 之后显式暴露 live events**，否则桌面端只能拿到摘要/终态表示：
+
+- 可能只有 `status`、`displayStatus`、`startedAt`/`endedAt`、`durationMs`、`filesChanged`、`tokenEvidence` 等终态字段，缺少细粒度 heartbeat/event 增量。
+- `recentEvents` 可能为空或只有终止事件；`lastUsefulEventAt` 可能等于 `endedAt`，`stalenessMs` 在该任务终态后不再有进展意义。
+- 桌面端应在 UI 上区分“live 跟踪中”与“摘要/终态”两种呈现，但**不得伪造**缺失的 live 事件或心跳（遵守 §14.3 的真实性优先原则）。这类展示降级不能写入 `fallbackApplied`；该字段只描述 worker alias fallback。
+- Codex worker 任务的 live 可见性取决于 host 是否暴露事件，本契约不承诺其一定可 live 跟踪。
+
+### 15.4 桌面端只读，不得派发/取消 Codex worker
+
+- 桌面端仍是 **只读观察者**（见 §1、§7）。即使现在能区分 Codex worker 任务，桌面端**不得**派发、重试、取消或清理 Codex worker，也不得写 `.subagent-runs/` 或任何 run artifact。
+- bridge 只有 `GET`，无写接口；dispatch/cancel/cleanup 一律由 Codex/SCP 总控通过 MCP 工具执行。`runtime`/`dispatcher` 等字段仅用于展示分层，不授予桌面端任何控制权。
+
+### 15.5 关于 SCP runtime 与 Codex worker 的关系
+
+- `dispatcher="scp-claude"` 明确表示任务由 SCP Node MCP runtime 派发为 Claude subagent。
+- `dispatcher="codex-worker"` 表示任务作为 Codex worker 派发。**本契约不声称 SCP Node MCP runtime 直接 spawn Codex worker**；Codex worker 的实际启动与生命周期由 Codex 侧负责，SCP 视图模型只消费其可观测的摘要/终态结果。
+- 桌面端不应假设 SCP 与 Codex worker 之间存在某种受 SCP 控制的父子进程关系或 handoff 拓扑；这类关系属于 §14.3 所述 v2 范畴，在对应 schema 字段进入 `desktop-status.schema.json` 之前不得在 v1 伪造。

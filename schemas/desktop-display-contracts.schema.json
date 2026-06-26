@@ -1,0 +1,717 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "desktop-display-contracts.schema.json",
+  "title": "SCP desktop display contracts",
+  "description": "Machine-readable contract for the desktop monitor's three display modes. Documents scp.desktop-display-contracts/v1. This is a documentation-backed contract, not a runtime wire payload: it captures the shared invariants, per-mode layout/interaction rules, coexistence policy, and the v1 capability boundary for the wallboard. The canonical machine IDs are right-dock (Side Monitor), workbench (Workbench, default primary), and wallboard (Wallboard); implementations MUST use these IDs verbatim in configuration, telemetry, and this schema (docs/desktop-display-contracts.md §4, §8.1). The desktop is a read-only observer of SCP run views (scp.run-view/v1); it never writes run artifacts. Where the underlying data model cannot yet honestly support a feature, the contract says so in deferredCapabilities rather than letting the UI fake it. Cross-artifact vocabulary (mode IDs, enum tokens, required state keys, shared scope, deferred capabilities, hero metrics) uses the canonical literals from docs/desktop-display-contracts.md and the desktop app's display TS types verbatim.",
+  "type": "object",
+  "required": ["schemaVersion", "schema", "shared", "modes", "coexistence", "deferredCapabilities"],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Numeric version of the desktop display contracts document."
+    },
+    "schema": {
+      "type": "string",
+      "const": "scp.desktop-display-contracts/v1",
+      "description": "Versioned contract identifier for the desktop display contracts."
+    },
+    "shared": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Invariants shared by all three display modes (docs §5). Every mode must honor these regardless of observation distance.",
+      "required": ["dataHonesty", "tokenPresentation", "reducedMotion", "accessibility", "localization", "disconnectedBehavior", "freshnessThresholds"],
+      "properties": {
+        "dataHonesty": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Rules keeping the UI truthful (docs §5.1). A Session maps to one scheduling run (ScpRunView); a Subagent maps to a single Claude task (ScpTaskView / ScpActiveTask). No fabricated live token rates, throughput, or 'effective productivity' figures.",
+          "properties": {
+            "sessionMapping": { "type": "string", "description": "How a Session is represented (one ScpRunView)." },
+            "subagentMapping": { "type": "string", "description": "How a Subagent is represented (one ScpTaskView / ScpActiveTask)." },
+            "forbiddenFabrications": {
+              "type": "array",
+              "description": "Effects/figures that must never be invented to enhance perceived busyness.",
+              "items": { "type": "string" }
+            },
+            "renderViewModelDirectly": {
+              "type": "boolean",
+              "description": "True when the desktop must render the SCP view model directly and never read raw run artifacts."
+            }
+          }
+        },
+        "tokenPresentation": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Honest token display rules (docs §5.2). Show precise values only when tokenEvidence.measured === true; otherwise label explicitly as 'not measured' / 'run-level aggregate only'. No fake zero values when data is missing. Mode 3 hero token display uses accumulated measured totals only; no synthetic token stream or rate in v1.",
+          "properties": {
+            "preciseOnlyWhenMeasured": { "type": "boolean", "description": "Whether precise values are shown only when measured evidence is present." },
+            "missingDataLabel": { "type": "string", "description": "Copy used when token data is missing, e.g. 'not measured' / '未测量'." },
+            "aggregateOnlyLabel": { "type": "string", "description": "Copy used when only run-level aggregation is available, e.g. 'run-level aggregate only' / '仅有运行级聚合'." },
+            "noFakeZero": { "type": "boolean", "description": "Whether fake zero values are forbidden when data is absent." },
+            "noSyntheticTokenRate": { "type": "boolean", "description": "Whether synthetic real-time token rate/throughput is forbidden in v1." }
+          }
+        },
+        "reducedMotion": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Reduced motion is a hard requirement across all modes, including the wallboard (docs §5.3). It degrades rather than disabling the UI; Mode 1/2 lose no information under reduced motion.",
+          "properties": {
+            "required": { "type": "boolean", "description": "Whether reduced motion support is mandatory." },
+            "largeScreenAlsoSupported": { "type": "boolean", "description": "Whether the wallboard/large-screen mode must also honor reduced motion." },
+            "degradationBehavior": {
+              "type": "string",
+              "enum": ["static", "minimal", "disabled"],
+              "description": "How motion degrades: 'static' = freeze ambient motion and keep data updates; 'minimal' = keep only essential transitions; 'disabled' = drop all motion."
+            },
+            "nodeStateViaNonMotion": { "type": "boolean", "description": "When true, node state is expressed via brightness/border/text only, never motion alone." }
+          }
+        },
+        "accessibility": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Keyboard reachability and non-color signaling rules (docs §5.4). High-priority state must never rely on color alone; at least one of position/border/icon/text must accompany it. right-dock and workbench must have a complete keyboard path; wallboard MAY use canvas but core information must also exist as a DOM/aria mirror.",
+          "properties": {
+            "keyboardReachableModes": {
+              "type": "array",
+              "description": "Modes that must have a full keyboard path (right-dock and workbench).",
+              "items": { "type": "string", "enum": ["right-dock", "workbench"] }
+            },
+            "nonColorSignalingRequired": { "type": "boolean", "description": "Whether high-priority state requires a non-color secondary signal." },
+            "canvasMustHaveDomMirror": { "type": "boolean", "description": "Whether canvas regions must keep a DOM/aria text mirror of core information." },
+            "progressiveDisclosureDefault": { "type": "boolean", "description": "Whether glance-first rendering with progressive disclosure into detail is the default." }
+          }
+        },
+        "localization": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Bilingual (zh/en) and formatting rules (docs §5.5). Locale switching, time formatting, and number formatting must all route through one shared layer; no mixed languages or format drift. Waiting-class states must name the next action.",
+          "properties": {
+            "locales": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Supported locale codes, e.g. ['en', 'zh']."
+            },
+            "singleFormatterLayer": { "type": "boolean", "description": "Whether time/number/locale formatting all go through one shared utility layer." },
+            "copyMustBeBilingual": { "type": "boolean", "description": "Whether every copy key must ship complete in both locales." },
+            "noMixedLanguage": { "type": "boolean", "description": "Whether mixing languages within a single view is forbidden." },
+            "waitingStatesMustNameNextAction": { "type": "boolean", "description": "Whether waiting-class states must name the next action, e.g. 'Waiting on you — approve shell access'." }
+          }
+        },
+        "disconnectedBehavior": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Behavior when the bridge connection is lost (docs §5.6). Degradation is allowed, but a full blank screen or silent display of stale data is forbidden. The UI must show an explicit disconnected banner stating the source time of the last known state.",
+          "properties": {
+            "blankScreenForbidden": { "type": "boolean", "description": "Whether showing a fully blank screen is forbidden." },
+            "silentStaleDataForbidden": { "type": "boolean", "description": "Whether silently showing stale data without a marker is forbidden." },
+            "explicitDisconnectedBannerRequired": { "type": "boolean", "description": "Whether an explicit disconnected banner with last-known-state time is required." },
+            "regionalDegradePreferred": { "type": "boolean", "description": "Whether connection errors should degrade regions rather than the whole page." },
+            "pollingFallback": { "type": "boolean", "description": "Whether the desktop falls back to /health + /runs polling after SSE loss." },
+            "retryIntervalMs": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "min": { "type": "integer", "minimum": 0 },
+                "max": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        },
+        "freshnessThresholds": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Freshness / staleness thresholds (docs §5.7, §8.5). The run view exposes stalenessMs, lastHeartbeatAt, lastUsefulEventAt; the desktop compares these against a single shared threshold source rather than each mode inventing its own. The threshold source and the freshness indicator are shared single-source utilities across all three modes.",
+          "properties": {
+            "singleThresholdSource": { "type": "boolean", "description": "Whether staleness thresholds come from one shared source." },
+            "staleMs": { "type": "integer", "minimum": 0, "description": "Milliseconds after which a run with no forward progress is considered stale (STALE)." },
+            "fields": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Run-view fields used to compute freshness, e.g. ['stalenessMs','lastHeartbeatAt','lastUsefulEventAt']."
+            }
+          }
+        }
+      }
+    },
+    "modes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["right-dock", "workbench", "wallboard"],
+      "description": "Per-mode contracts keyed by canonical mode ID (docs §4, §8.1). Exactly these three keys are valid in v1.",
+      "properties": {
+        "right-dock": { "$ref": "#/$defs/rightDockMode" },
+        "workbench": { "$ref": "#/$defs/workbenchMode" },
+        "wallboard": { "$ref": "#/$defs/wallboardMode" }
+      }
+    },
+    "coexistence": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Window coexistence policy (docs §7). The three modes are observation distances, not mutually exclusive windows. right-dock and workbench may coexist; wallboard is an independent observation window that does not steal local selection state from the others. All coexisting windows fan out internally from the single bridge connection.",
+      "properties": {
+        "defaultPrimaryMode": {
+          "type": "string",
+          "const": "workbench",
+          "description": "The mode that opens as the default main window. Canonical value: workbench."
+        },
+        "sharedAcrossWindows": {
+          "type": "array",
+          "description": "Global state shared when right-dock + workbench coexist (docs §7).",
+          "items": { "$ref": "#/$defs/coexistenceSharedScopeEnum" }
+        },
+        "notSharedAcrossWindows": {
+          "type": "array",
+          "description": "Local state that stays per-window when right-dock + workbench coexist (docs §7).",
+          "items": { "$ref": "#/$defs/coexistenceLocalScopeEnum" }
+        },
+        "wallboardIsIndependent": { "type": "boolean", "description": "Whether wallboard acts as an independent observation window." },
+        "wallboardDoesNotStealSelection": { "type": "boolean", "description": "Whether wallboard avoids stealing right-dock / workbench local selection." },
+        "wallboardReadsGlobalStateOnly": { "type": "boolean", "description": "Whether wallboard reads only global run state and the event stream." },
+        "switchEntryPoints": {
+          "type": "array",
+          "description": "UI entry points where mode switching is exposed (docs §7).",
+          "items": { "type": "string", "enum": ["workbenchDisplayMenu", "trayOrMenuBar", "dockSettingsMenu"] }
+        },
+        "singleBridgeConnection": { "type": "boolean", "description": "Whether multi-window UIs fan-out internally from one bridge connection rather than opening one each." }
+      }
+    },
+    "deferredCapabilities": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Capabilities that the current scp.* data model cannot honestly support in v1 (docs §1.1). The UI must not fake these; they require new schema fields from the main plugin. The wallboard v2 boundary depends on these. The unsupportedInV1 token set is bijective with the desktop app's deferred capability IDs.",
+      "properties": {
+        "unsupportedInV1": {
+          "type": "array",
+          "description": "Features that cannot be made real on the current contract and must not be faked.",
+          "items": { "$ref": "#/$defs/deferredCapabilityEnum" }
+        },
+        "wallboardV2Needs": {
+          "type": "array",
+          "description": "New schema fields the main plugin should add to enable a full wallboard v2 conductor narrative.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "schedulingEdges",
+              "handoffEdges",
+              "attemptRetryCounts",
+              "tokenThroughputWindow",
+              "parentChildDependencyRelation"
+            ]
+          }
+        },
+        "wallboardV2DeferredEffects": {
+          "type": "array",
+          "description": "Visual effects that are visual guesses without new schema and must be deferred to wallboard v2 (docs §8.6 v1 honesty boundary).",
+          "items": { "type": "string", "enum": ["conductorSweep", "handoffRibbon", "tokenRiver"] }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "modeIdEnum": {
+      "type": "string",
+      "enum": ["right-dock", "workbench", "wallboard"],
+      "description": "Canonical display mode IDs (docs §4, §8.1). Implementations MUST use these verbatim."
+    },
+    "modeNameEnum": {
+      "type": "string",
+      "enum": ["Side Monitor", "Workbench", "Wallboard"],
+      "description": "Canonical display mode names (docs §4, §8.1)."
+    },
+    "modeRoleEnum": {
+      "type": "string",
+      "enum": ["companion", "primary", "showcase"],
+      "description": "Mode role. right-dock = companion, workbench = primary, wallboard = showcase (docs §4 'Default?' column)."
+    },
+    "autoExpandPolicyEnum": {
+      "type": "string",
+      "enum": ["never", "selectedSessionOnly", "anyFailedOrBlocked"],
+      "description": "right-dock panel auto-expand policy (docs §4.1, §8.3). Pinned default: selectedSessionOnly."
+    },
+    "requiredStateKeyEnum": {
+      "type": "string",
+      "enum": ["firstRunNoRunsYet", "noActiveRunsAllQuiet", "bridgeDisconnected", "showingLastKnownState", "reconnectedReplayingMissedEvents"],
+      "description": "Required state keys every mode must define up front (docs §6)."
+    },
+    "coexistenceSharedScopeEnum": {
+      "type": "string",
+      "enum": ["connectionState", "locale", "theme", "reducedMotion", "bridgeHealth"],
+      "description": "State shared across coexisting mode windows (docs §7)."
+    },
+    "coexistenceLocalScopeEnum": {
+      "type": "string",
+      "enum": ["selectedRun", "selectedTask", "followLive", "localExpansion", "scrollPosition"],
+      "description": "State each window keeps locally, not shared (docs §7)."
+    },
+    "notificationTriggerEnum": {
+      "type": "string",
+      "enum": ["failed", "blocked", "waitingOnUser"],
+      "description": "Triggers permitted to raise a peripheral notification (docs §4.1, §8.4)."
+    },
+    "heroMetricEnum": {
+      "type": "string",
+      "enum": ["agentsInFlight", "tasksCompletedThisSession", "measuredTokensProcessed"],
+      "description": "Hero metrics wallboard v1 may honestly show, limited to three (docs §4.3)."
+    },
+    "deferredCapabilityEnum": {
+      "type": "string",
+      "enum": [
+        "agentToAgentHandoffEdges",
+        "controllerToAgentTopology",
+        "retryAttemptLevelStats",
+        "productiveVsChurnTokenSplit",
+        "serverProvidedTokenRate",
+        "serverProvidedThroughputRate"
+      ],
+      "description": "Deferred capability identifiers the underlying scp.* schemas cannot yet express (docs §1.1). wallboard v2 is gated on the main plugin adding the corresponding schema fields."
+    },
+    "healthRibbonMetricIdEnum": {
+      "type": "string",
+      "enum": ["ACTIVE", "STALE", "BLOCKED", "FAILED", "DONE_TOTAL"],
+      "description": "Health ribbon metric IDs (docs §4.2, §8.5). DONE_TOTAL represents the DONE / TOTAL count pair. Each must declare its value provenance."
+    },
+    "notificationPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Per-mode notification policy (docs §8.4). right-dock: taskbar/Dock badge count + system notifications restricted to failed/blocked/waiting-on-user + optional subtle sound (default off). workbench: in-app region-level alerts, no system notifications by default, errors degrade a region not the page. wallboard: alert rail + event ticker for high-priority items, no desktop system notifications.",
+      "properties": {
+        "badgeCount": { "type": "boolean", "description": "Whether a taskbar/Dock badge count of runs needing attention is shown (right-dock)." },
+        "systemNotifications": { "type": "boolean", "description": "Whether OS/system notifications are enabled. right-dock: true (restricted to notifyOn); workbench/wallboard: false." },
+        "inAppRegionAlerts": { "type": "boolean", "description": "Whether in-app region-level alerts are used instead of system notifications (workbench)." },
+        "alertRailAndTicker": { "type": "boolean", "description": "Whether an alert rail + event ticker surfaces high-priority items (wallboard)." },
+        "notifyOn": {
+          "type": "array",
+          "description": "Event classes that may raise a notification.",
+          "items": { "$ref": "#/$defs/notificationTriggerEnum" }
+        },
+        "sound": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Optional subtle sound policy (right-dock).",
+          "properties": {
+            "available": { "type": "boolean" },
+            "defaultOff": { "type": "boolean", "description": "Whether the sound is off by default." }
+          }
+        },
+        "errorsDegradeRegionNotPage": { "type": "boolean", "description": "Whether connection errors degrade a region rather than the whole page (workbench)." }
+      }
+    },
+    "healthRibbonMetric": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "A single always-on health ribbon metric. Each metric is clickable to filter the left list and MUST declare which view-model field(s) it is derived from (docs §8.5 provenance requirement).",
+      "required": ["id", "derivedFrom"],
+      "properties": {
+        "id": { "$ref": "#/$defs/healthRibbonMetricIdEnum" },
+        "derivedFrom": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "View-model field(s) this metric is derived from, e.g. ACTIVE <- run/task status; STALE <- stalenessMs vs stale threshold; BLOCKED <- task.status (blocked/waiting-on-user); FAILED <- task.status (failed); DONE_TOTAL <- task counts (completed vs total)."
+        },
+        "clickToFilter": { "type": "boolean", "description": "Whether clicking the metric filters the left run list." }
+      }
+    },
+    "stateCopyKeys": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Required state copy keys / state identifiers that every mode must define up front rather than improvising at implementation time (docs §6). Includes first-run, all-quiet, disconnected, last-known, and recovered states with their recommended bilingual copy tone.",
+      "properties": {
+        "requiredKeys": {
+          "type": "array",
+          "description": "State identifiers each mode must define.",
+          "items": { "$ref": "#/$defs/requiredStateKeyEnum" }
+        },
+        "copy": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Recommended unified copy tone keyed by state identifier. Values are bilingual sample strings.",
+          "properties": {
+            "noActiveSessions": { "type": "string", "description": "e.g. 'No active sessions / 当前没有活动会话'." },
+            "allQuiet": { "type": "string", "description": "e.g. 'All quiet / 当前已空闲'." },
+            "connectionLost": { "type": "string", "description": "e.g. 'Connection lost — showing last known state from HH:MM'." },
+            "showingLastKnownState": { "type": "string", "description": "Explicit stale/last-known-state helper copy when the UI is frozen on prior data." },
+            "recovered": { "type": "string", "description": "e.g. 'Back to normal — updates resumed'." },
+            "awaitingDirection": { "type": "string", "description": "e.g. 'All agents stopped — awaiting direction / 所有子代理已停止 — 等待新的调度'." }
+          }
+        }
+      }
+    },
+    "rightDockMode": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "right-dock — Side Monitor: a resident, low-distraction, collapsible right-side monitoring rail (companion window, not a second main panel). Answers 'is Claude working right now?' and 'does any session need a glance?' (docs §4.1).",
+      "required": ["id", "name", "role", "isDefault"],
+      "properties": {
+        "id": { "type": "string", "const": "right-dock" },
+        "name": { "type": "string", "const": "Side Monitor", "description": "Canonical name (docs §4, §8.1)." },
+        "role": { "type": "string", "const": "companion" },
+        "isDefault": { "type": "boolean", "const": false, "description": "right-dock is an optional companion, not the default primary." },
+        "geometry": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Dock geometry and material. Width must be configurable and persisted.",
+          "properties": {
+            "dockSide": { "type": "string", "enum": ["right"], "description": "Docked to the screen right edge, full height." },
+            "collapsedRailPx": { "type": "integer", "minimum": 0, "description": "Width of the collapsed status rail (48px)." },
+            "expandedWidthPx": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Expanded dock width range (docs §4.1: default 360, min 300, max 400).",
+              "properties": {
+                "default": { "type": "integer", "minimum": 0 },
+                "min": { "type": "integer", "minimum": 0 },
+                "max": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "material": { "type": "string", "enum": ["transparent-frosted", "black-frosted"], "description": "Default transparent frosted glass; black frosted suits low-light." },
+            "widthPersisted": { "type": "boolean", "description": "Whether the configured width is persisted across sessions." }
+          }
+        },
+        "informationArchitecture": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Three stacked layers: status bar, session stack, subagent drilldown.",
+          "properties": {
+            "layers": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["statusBar", "sessionStack", "subagentDrilldown"] }
+            },
+            "statusBarItems": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["connectionState", "localeToggle", "lastUpdatedAt", "displayModeMenu"] }
+            },
+            "sessionStackStatusDotAligned": { "type": "boolean", "description": "Whether session status dots sit on one vertical line." },
+            "subagentDrilldownFields": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["startedAt", "durationMs", "tokenUsage", "taskSummary", "risksAndVerification"] }
+            }
+          }
+        },
+        "autoExpandPolicy": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Panel auto-expand policy for right-dock (docs §4.1, §8.3). Must have an explicit config item with a pinned default. Default-expanded = most-recent active/running/blocked session; subagents collapsed by default; collapsing a session collapses its subagents; new events refresh dot + timestamp only (no force-expand).",
+          "properties": {
+            "mode": { "$ref": "#/$defs/autoExpandPolicyEnum", "description": "Active auto-expand policy." },
+            "default": { "type": "string", "const": "selectedSessionOnly", "description": "Pinned default auto-expand policy." },
+            "subagentsDefaultCollapsed": { "type": "boolean", "description": "Whether subagent rows are collapsed by default." },
+            "collapseSessionCollapsesSubagents": { "type": "boolean", "description": "Whether collapsing a session also collapses its subagents." },
+            "newEventDoesNotForceExpand": { "type": "boolean", "description": "Whether new events only refresh the status dot and update time." }
+          }
+        },
+        "notificationPolicy": { "$ref": "#/$defs/notificationPolicy", "description": "Peripheral alert policy (docs §8.4). right-dock uses badge count + restricted system notifications + optional sound (default off)." },
+        "states": { "$ref": "#/$defs/stateCopyKeys" },
+        "risks": {
+          "type": "array",
+          "description": "Documented risks for this mode.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "workbenchMode": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "workbench — Workbench: the default primary workbench (controller-first, dense but calm, readable under stress). The main window for watching builds, chasing problems, and reading detail (docs §4.2).",
+      "required": ["id", "name", "role", "isDefault"],
+      "properties": {
+        "id": { "type": "string", "const": "workbench" },
+        "name": { "type": "string", "const": "Workbench", "description": "Canonical name (docs §4, §8.1)." },
+        "role": { "type": "string", "const": "primary" },
+        "isDefault": { "type": "boolean", "const": true, "description": "workbench is the default primary main window." },
+        "layout": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Title/Connection bar -> Health Ribbon -> three columns -> Footer (docs §4.2, §8.2).",
+          "properties": {
+            "titleConnectionBarPx": { "type": "integer", "minimum": 0, "description": "Top title/connection bar height (~32px)." },
+            "healthRibbonPx": { "type": "integer", "minimum": 0, "description": "Second-row health ribbon height (~24px)." },
+            "columns": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Three-column body: left run list, center detail+table+inspection, right events+metrics.",
+              "properties": {
+                "left": { "type": "string", "description": "Left column width, e.g. '240px' (Run List)." },
+                "center": { "type": "string", "description": "Center column width, e.g. '1fr' (Run Detail + Task Table + Task Inspection)." },
+                "right": { "type": "string", "description": "Right column width, e.g. '260px' (Recent Events + Metrics Rail)." }
+              }
+            },
+            "footerPx": { "type": "integer", "minimum": 0, "description": "Bottom footer height (~20px)." }
+          }
+        },
+        "windowSize": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Recommended default window size.",
+          "properties": {
+            "default": { "type": "string", "description": "Default window size, e.g. '1100-1280 x 720'." }
+          }
+        },
+        "degradeBreakpoints": {
+          "type": "array",
+          "description": "Width-based degradation breakpoints, ordered by descending width (docs §4.2, §8.2).",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "maxWidthPx": { "type": "integer", "minimum": 0, "description": "Below this width the behavior applies." },
+              "behavior": {
+                "type": "string",
+                "enum": ["rightColumnCollapsesToTab", "singleColumnDegrade"],
+                "description": "rightColumnCollapsesToTab (~980px); singleColumnDegrade (~820px)."
+              }
+            }
+          }
+        },
+        "healthRibbon": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Always-on health ribbon (docs §4.2, §8.5). Always present, not gated on a selected run. Each metric is a filter into the left list and MUST declare its value provenance (which view-model field it is derived from) before implementation.",
+          "properties": {
+            "alwaysPresent": { "type": "boolean", "description": "Whether the health ribbon is always present, not gated on a selected run." },
+            "metrics": {
+              "type": "array",
+              "description": "Health ribbon metrics with their value provenance.",
+              "items": { "$ref": "#/$defs/healthRibbonMetric" }
+            }
+          }
+        },
+        "centerWorkbench": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Center column splits into Run Header, Task Table, Selected Task Inspection so the user can see run, task, and task detail without jumping (docs §4.2, §8.3).",
+          "properties": {
+            "segments": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["runHeader", "taskTable", "selectedTaskInspection"] }
+            }
+          }
+        },
+        "interactionModel": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Stable, predictable interaction (docs §4.2). Selected run/task must stick; Follow live must be explicit and visible; manual scroll-back surfaces Jump to latest.",
+          "properties": {
+            "focusStickiness": { "type": "boolean", "description": "Whether the selected run/task sticks and is not auto-stolen by new events." },
+            "followLive": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "explicitlyVisible": { "type": "boolean", "description": "Whether Follow live is explicitly visible." },
+                "jumpToLatestOnScrollBack": { "type": "boolean", "description": "Whether manual scroll-back surfaces a Jump to latest control." }
+              }
+            },
+            "regionalDegradeOnError": { "type": "boolean", "description": "Whether connection errors degrade regions rather than blanking the page." },
+            "keyboardShortcuts": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["upDownSwitchRun", "enterOpenDetail", "tabBetweenColumns", "recoveryActions"] }
+            }
+          }
+        },
+        "copyStyle": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Quiet Cockpit style: verb phrases over bare enums; warning tone is reminder-style, not screaming; failure uses a two-clause 'what happened + what happens next'. Copy must be fully bilingual.",
+          "properties": {
+            "style": { "type": "string", "const": "quiet-cockpit" },
+            "useVerbPhrases": { "type": "boolean" },
+            "warningTone": { "type": "string", "enum": ["reminder", "alarming"] },
+            "failureClauseStyle": { "type": "string", "enum": ["twoClause", "singleClause"] },
+            "bilingualRequired": { "type": "boolean" },
+            "samplePhrases": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Sample bilingual verb-phrase states, e.g. 'Working / 正在处理'."
+            }
+          }
+        },
+        "notificationPolicy": { "$ref": "#/$defs/notificationPolicy", "description": "Notification policy (docs §8.4). workbench uses in-app region-level alerts; no system notifications by default; errors degrade a region, not the page." },
+        "states": { "$ref": "#/$defs/stateCopyKeys" },
+        "risks": {
+          "type": "array",
+          "description": "Documented risks for this mode.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "wallboardMode": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "wallboard — Wallboard: a single-window large-screen showcase wallboard (ambient oversight, demos, second monitor). Tells the story 'Codex is orchestrating many Claude subagents' with real dynamics, not fine-grained operation (docs §4.3).",
+      "required": ["id", "name", "role", "isDefault"],
+      "properties": {
+        "id": { "type": "string", "const": "wallboard" },
+        "name": { "type": "string", "const": "Wallboard", "description": "Canonical name (docs §4, §8.1)." },
+        "role": { "type": "string", "const": "showcase" },
+        "isDefault": { "type": "boolean", "const": false, "description": "wallboard is a presentation board, not the default primary." },
+        "capabilityTiers": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "v1/v2 capability boundary (docs §1.1, §8.6). v1 builds a real wallboard on the current contract; v2 waits for main-plugin schema extension to do the full conductor/handoff narrative.",
+          "properties": {
+            "v1": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "What wallboard v1 may honestly build on the current contract.",
+              "properties": {
+                "allowed": {
+                  "type": "array",
+                  "items": { "type": "string", "enum": ["centralConductorCore", "activeAgentCount", "sessionClusters", "recentEventsTicker", "conservativeAccumulatedTokenCount", "realStateDrivenNodeLights", "riskTiering"] }
+                },
+                "mustNotFake": {
+                  "type": "array",
+                  "items": { "type": "string", "enum": ["agentToAgentHandoffEdges", "controllerToAgentTopology", "productiveVsChurnTokenSplit", "serverProvidedTokenRate", "serverProvidedThroughputRate"] }
+                }
+              }
+            },
+            "v2": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "What wallboard v2 will require from main-plugin schema extension. See deferredCapabilities.wallboardV2Needs.",
+              "properties": {
+                "deferredEffects": {
+                  "type": "array",
+                  "items": { "type": "string", "enum": ["conductorSweep", "handoffRibbon", "tokenRiver"] }
+                },
+                "requiresNewSchema": { "type": "boolean" }
+              }
+            }
+          }
+        },
+        "renderingStrategy": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Mixed rendering, not full-page canvas (docs §4.3). Motion/atmosphere on canvas; hero metrics, session clusters, alerts, events, and token/cost numbers in DOM. Canvas regions MUST provide a DOM/aria text mirror.",
+          "properties": {
+            "canvasRegions": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["ambientBackground", "agentSwarm", "handoffLines_v2Only", "particlesOrbitsLightflow"] }
+            },
+            "domRegions": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["heroMetrics", "sessionClusters", "alertRail", "recentEvents", "tokenCostNumbers"] }
+            }
+          }
+        },
+        "stageLayout": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Stage is a vertical stack of bands (docs §4.3, §8.2). commandBar (~7%) and heroMetrics (~15%) sit at the top; statusRibbon (~4%) at the bottom; the bodyRow between them splits horizontally into sessionClusters (~22%), agentSwarm (~48%), alertsEvents (~30%) which sum to ~100% of the body row. Top/bottom band percentages are of the viewport height; body-row column percentages are of the body-row width — they are NOT on the same axis and must not be summed together.",
+          "properties": {
+            "commandBarPct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Top command bar band, % of viewport height (~7%)." },
+            "heroMetricsBandPct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Top hero metrics band, % of viewport height (~15%)." },
+            "bodyRow": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Horizontal split of the body row. The three columns sum to ~100% of the body-row width, NOT the viewport.",
+              "properties": {
+                "sessionClustersPct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Left session clusters, % of body-row width (~22%)." },
+                "agentSwarmPct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Center agent swarm / conductor core, % of body-row width (~48%)." },
+                "alertsEventsPct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Right alerts + events, % of body-row width (~30%)." }
+              }
+            },
+            "statusRibbonPct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Bottom status ribbon / event ticker band, % of viewport height (~4%)." }
+          }
+        },
+        "heroMetrics": {
+          "type": "array",
+          "description": "Hero metrics, kept to three honest, contract-derivable values (docs §4.3).",
+          "items": { "$ref": "#/$defs/heroMetricEnum" }
+        },
+        "motionSystem": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Two motion layers. The three primary modes users must recognize, and ambient motion that stays subordinate to them.",
+          "properties": {
+            "primaryModes": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["wakeCascade", "escalation", "recovery"] }
+            },
+            "ambientLayer": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["respiration", "tokenTide", "completionSettle", "focusHold"] }
+            },
+            "ambientSubordinateToPrimary": { "type": "boolean" }
+          }
+        },
+        "reducedMotionDegradation": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Reduced motion for the wallboard degrades to (docs §5.3, §8.6): static conductor core, no particles/drift/orbit, hero metrics still update, event ticker becomes a static list, node state via brightness/border/text only.",
+          "properties": {
+            "staticConductorCore": { "type": "boolean" },
+            "noParticlesDriftOrbit": { "type": "boolean" },
+            "heroMetricsStillUpdate": { "type": "boolean" },
+            "tickerBecomesStaticList": { "type": "boolean" },
+            "nodeStateViaBrightnessBorderText": { "type": "boolean" }
+          }
+        },
+        "canvasDomMirror": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Required DOM/aria text mirror for canvas regions, so core info is never canvas-only (docs §5.4). The mirror MUST include at minimum: current active agent count, current list of abnormal agents, the most recent 5 high-priority events, and the current wallboard status.",
+          "properties": {
+            "required": { "type": "boolean" },
+            "mirrorItems": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["activeAgentCount", "abnormalAgentList", "last5HighPriorityEvents", "wallboardOverallState"] }
+            }
+          }
+        },
+        "failureTheater": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Failure theater is allowed but must not be cheap (docs §8.6). Problem nodes shift cold-to-warm-amber plus non-color signals; the conductor core dims and pulls a thin thread to the problem node. No red-screen alarms, no full-screen flashing, no color-only changes. Bare 'Awaiting direction.' without context is forbidden.",
+          "properties": {
+            "problemNodeColorShift": { "type": "string", "enum": ["coldToWarmAmber"] },
+            "nonColorSignals": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["borderShapeChange", "textLabel", "highPriorityTickerEntry", "conductorThread"] }
+            },
+            "forbidden": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["redScreenAlarm", "fullScreenFlashing", "colorOnlyChange"] }
+            },
+            "awaitingDirectionNeedsContext": { "type": "boolean", "description": "Whether 'Awaiting direction.' copy must always carry explicit context, e.g. 'All agents stopped — awaiting direction'." }
+          }
+        },
+        "smallWindowDegrade": {
+          "type": "array",
+          "description": "Wallboard is inherently unsuited to small windows; degradation breakpoints ordered by descending width (docs §8.6).",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "maxWidthPx": { "type": "integer", "minimum": 0, "description": "Below this width the behavior applies (~1280px, ~980px)." },
+              "behavior": {
+                "type": "string",
+                "enum": ["shrinkSwarmTabsColumnsDisableParticles", "dropWallboardLayoutSuggestWorkbench"],
+                "description": "shrinkSwarmTabsColumnsDisableParticles (~1280px); dropWallboardLayoutSuggestWorkbench (~980px)."
+              }
+            }
+          }
+        },
+        "performanceBudget": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Performance budget constraints to write into implementation early (docs §8.6).",
+          "properties": {
+            "targetFps": { "type": "integer", "minimum": 0, "description": "Target frames per second under long runs (60)." },
+            "degradedFps": { "type": "integer", "minimum": 0, "description": "Acceptable fps after degradation (30)." },
+            "agentClusteringThreshold": { "type": "boolean", "description": "Whether an agent-count clustering threshold must be defined." },
+            "canvasNodeOrParticleCap": { "type": "boolean", "description": "Whether a canvas node/particle cap must be defined." },
+            "longRunMemoryLeakMonitoring": { "type": "boolean", "description": "Whether a long-run memory-leak monitoring plan must exist." }
+          }
+        },
+        "notificationPolicy": { "$ref": "#/$defs/notificationPolicy", "description": "Notification policy (docs §8.4). wallboard uses an alert rail + event ticker for high-priority items; no desktop system notifications." },
+        "states": { "$ref": "#/$defs/stateCopyKeys" },
+        "risks": {
+          "type": "array",
+          "description": "Documented risks for this mode.",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

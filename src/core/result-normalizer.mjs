@@ -68,6 +68,7 @@ export function normalizeAgentResult(value) {
       nextSteps: Array.isArray(nextSteps) ? nextSteps.map(String) : [],
       tokenUsageSummary: normalizeTokenUsageSummary(value.tokenUsageSummary),
       metrics: normalizeMetrics(value.metrics),
+      ...normalizeWorkerIdentity(value),
       ...(value.repair ? { repair: value.repair } : {}),
     }
   }
@@ -205,6 +206,19 @@ function normalizeRisks(value) {
 function normalizeMetrics(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return value
+}
+
+function normalizeWorkerIdentity(value) {
+  if (!value || typeof value !== 'object') return {}
+  const result = {}
+  if (['claude', 'codex'].includes(value.workerRuntime)) result.workerRuntime = value.workerRuntime
+  for (const key of ['workerType', 'workerAlias', 'plainTextResult']) {
+    if (typeof value[key] === 'string' && value[key].trim()) result[key] = value[key].trim()
+  }
+  for (const key of ['fallbackApplied', 'normalizationFailed']) {
+    if (typeof value[key] === 'boolean') result[key] = value[key]
+  }
+  return result
 }
 
 function normalizeTokenUsageSummary(value) {

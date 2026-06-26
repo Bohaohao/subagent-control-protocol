@@ -1,10 +1,10 @@
 {
   "name": "subagent-control-protocol",
-  "version": "0.3.4",
-  "generatedAt": "2026-06-26T02:24:11.520Z",
+  "version": "0.3.5",
+  "generatedAt": "2026-06-26T08:25:43.460Z",
   "server": {
     "filename": "server.mjs",
     "url": "https://raw.githubusercontent.com/Bohaohao/subagent-control-protocol/main/plugins/subagent-control-protocol/dist/server.mjs",
-    "sha256": "94c7fa37972c2b044c50ab82554da65631f375ac8e20e194894b98be17362f0e"
+    "sha256": "809ae98115a3d5533f5d5d033751e5610d6a7ff389da0eabff396badea7035e0"
   }
 }

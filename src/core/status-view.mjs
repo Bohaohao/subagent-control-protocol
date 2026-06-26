@@ -131,6 +131,11 @@ export function buildTaskViewModel(input) {
     tokenEvidence: summarizeTokenEvidence(task),
     blocked: task.blocked || parsed.blocked || undefined,
     error: task.error || parsed.error ? snippet(String(task.error || parsed.error), SNIPPET_LIMIT) : undefined,
+    runtime: firstString(task.runtime, parsed.workerRuntime, parsed.runtime),
+    dispatcher: firstString(task.dispatcher, parsed.dispatcher),
+    workerType: firstString(task.workerType, parsed.workerType),
+    workerAlias: firstString(task.workerAlias, parsed.workerAlias),
+    fallbackApplied: firstBoolean(task.fallbackApplied, parsed.fallbackApplied),
   }
 
   return pruneUndefined(out)
@@ -793,6 +798,20 @@ function basename(dir) {
   const cleaned = String(dir).replace(/[\\/]+$/, '')
   const match = cleaned.match(/[\\/]?([^\\/]+)$/)
   return match ? match[1] : cleaned
+}
+
+function firstString(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return undefined
+}
+
+function firstBoolean(...values) {
+  for (const value of values) {
+    if (typeof value === 'boolean') return value
+  }
+  return undefined
 }
 
 function pruneUndefined(value) {

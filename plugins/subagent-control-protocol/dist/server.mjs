@@ -39,7 +39,8 @@ var init_define_SCP_RESULT_SCHEMA_INLINE = __esm({
     define_SCP_RESULT_SCHEMA_INLINE_default = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "agent-result.schema.json",
-      title: "Claude subagent result",
+      title: "Agent result",
+      description: "Structured result returned by a Claude subagent or a Codex worker. Claude results may omit worker identity fields; Codex worker results should include workerRuntime and workerType.",
       type: "object",
       additionalProperties: false,
       required: [
@@ -139,6 +140,31 @@ var init_define_SCP_RESULT_SCHEMA_INLINE = __esm({
             tokensTotal: { type: "number" },
             costUsd: { type: "number" }
           }
+        },
+        workerRuntime: {
+          type: "string",
+          enum: ["claude", "codex"],
+          description: "Optional runtime identity. Codex workers should set this to 'codex'; Claude subagents may omit it or set 'claude'."
+        },
+        workerType: {
+          type: "string",
+          description: "Optional resolved worker type, such as 'huoshan-worker', 'zhipu-worker', 'normal-worker', or a Claude task role."
+        },
+        workerAlias: {
+          type: "string",
+          description: "Optional user-facing alias or nickname that resolved to workerType, such as 'huoshan'."
+        },
+        fallbackApplied: {
+          type: "boolean",
+          description: "Optional. True when a requested Codex worker alias fell back to another worker type, for example zhipu-worker -> normal-worker."
+        },
+        plainTextResult: {
+          type: "string",
+          description: "Optional controller-preserved text when a worker could not produce fully structured JSON."
+        },
+        normalizationFailed: {
+          type: "boolean",
+          description: "Optional. True when the controller had to preserve a non-conforming result instead of fully normalizing it."
         }
       }
     };
@@ -32072,6 +32098,7 @@ function normalizeAgentResult(value) {
       nextSteps: Array.isArray(nextSteps) ? nextSteps.map(String) : [],
       tokenUsageSummary: normalizeTokenUsageSummary2(value.tokenUsageSummary),
       metrics: normalizeMetrics2(value.metrics),
+      ...normalizeWorkerIdentity(value),
       ...value.repair ? { repair: value.repair } : {}
     };
   }
@@ -32190,6 +32217,18 @@ function normalizeRisks2(value) {
 function normalizeMetrics2(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value;
+}
+function normalizeWorkerIdentity(value) {
+  if (!value || typeof value !== "object") return {};
+  const result = {};
+  if (["claude", "codex"].includes(value.workerRuntime)) result.workerRuntime = value.workerRuntime;
+  for (const key of ["workerType", "workerAlias", "plainTextResult"]) {
+    if (typeof value[key] === "string" && value[key].trim()) result[key] = value[key].trim();
+  }
+  for (const key of ["fallbackApplied", "normalizationFailed"]) {
+    if (typeof value[key] === "boolean") result[key] = value[key];
+  }
+  return result;
 }
 function normalizeTokenUsageSummary2(value) {
   if (typeof value === "string" && value.trim()) return value.trim();
@@ -33960,7 +33999,12 @@ function buildTaskViewModel(input) {
     nextSteps: collectNextSteps(parsed.nextSteps),
     tokenEvidence: summarizeTokenEvidence(task),
     blocked: task.blocked || parsed.blocked || void 0,
-    error: task.error || parsed.error ? snippet2(String(task.error || parsed.error), SNIPPET_LIMIT2) : void 0
+    error: task.error || parsed.error ? snippet2(String(task.error || parsed.error), SNIPPET_LIMIT2) : void 0,
+    runtime: firstString(task.runtime, parsed.workerRuntime, parsed.runtime),
+    dispatcher: firstString(task.dispatcher, parsed.dispatcher),
+    workerType: firstString(task.workerType, parsed.workerType),
+    workerAlias: firstString(task.workerAlias, parsed.workerAlias),
+    fallbackApplied: firstBoolean(task.fallbackApplied, parsed.fallbackApplied)
   };
   return pruneUndefined2(out);
 }
@@ -34537,6 +34581,18 @@ function basename(dir) {
   const cleaned = String(dir).replace(/[\\/]+$/, "");
   const match = cleaned.match(/[\\/]?([^\\/]+)$/);
   return match ? match[1] : cleaned;
+}
+function firstString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return void 0;
+}
+function firstBoolean(...values) {
+  for (const value of values) {
+    if (typeof value === "boolean") return value;
+  }
+  return void 0;
 }
 function pruneUndefined2(value) {
   if (Array.isArray(value)) return value;

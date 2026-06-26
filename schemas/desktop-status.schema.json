@@ -186,7 +186,29 @@
         "nextSteps": { "type": "array", "items": { "type": "string" } },
         "tokenEvidence": { "type": "object", "additionalProperties": true },
         "blocked": { "type": ["string", "boolean", "null"] },
-        "error": { "type": ["string", "null"] }
+        "error": { "type": ["string", "null"] },
+        "runtime": {
+          "type": ["string", "null"],
+          "enum": ["claude", "codex", null],
+          "description": "Optional. Which agent runtime executed this task. 'claude' = a Claude subagent driven through SCP heartbeats/events; 'codex' = a Codex worker task. null when undetermined or not applicable. Consumers must tolerate absence/null; absence does not imply 'claude'."
+        },
+        "dispatcher": {
+          "type": ["string", "null"],
+          "enum": ["scp-claude", "codex-worker", null],
+          "description": "Optional. How the task was dispatched. 'scp-claude' = dispatched via the SCP Node MCP runtime as a Claude subagent; 'codex-worker' = dispatched as a Codex worker. null when undetermined. Consumers must tolerate absence/null."
+        },
+        "workerType": {
+          "type": ["string", "null"],
+          "description": "Optional. Resolved worker/agent type for display and filtering (for example 'huoshan-worker', 'zhipu-worker', 'normal-worker', or a Claude task role). Opaque to SCP; null when not provided."
+        },
+        "workerAlias": {
+          "type": ["string", "null"],
+          "description": "Optional. Human-friendly alias or nickname that resolved to workerType (for example 'huoshan'). Opaque to SCP; null when not provided."
+        },
+        "fallbackApplied": {
+          "type": ["boolean", "null"],
+          "description": "Optional. True when a requested Codex worker alias fell back to another worker type (for example zhipu-worker -> normal-worker). This does not describe UI rendering fallback. null when not applicable."
+        }
       }
     },
     "checkItem": {

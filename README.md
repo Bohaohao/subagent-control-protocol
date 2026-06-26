@@ -1,8 +1,8 @@
 # Subagent Control Protocol
 
-**Subagent Control Protocol (SCP)** is an installable Codex plugin for orchestrating Claude Code CLI subagents. It bundles two things that work together: an MCP runtime that exposes the execution tools, and an orchestrator Skill that teaches Codex when to split work, run tasks in parallel, add reviewers, and integrate results. Each subagent returns a structured, machine-readable result: files changed, commands run, verification evidence, risks, next steps, and token/cost evidence.
+**Subagent Control Protocol (SCP)** is an installable Codex plugin for controller-led agent orchestration. It bundles two things that work together: an MCP runtime that runs Claude Code CLI subagents, and an orchestrator Skill that also teaches Codex how to route named non-Claude work to host-spawned Codex workers such as `huoshan-worker`, `zhipu-worker`, or `normal-worker`. Every worker returns a structured, machine-readable result: files changed, commands run, verification evidence, risks, next steps, and token/cost evidence.
 
-**Subagent Control Protocol（SCP）** 是一个可直接安装的 Codex 插件，用来让 Codex 编排 Claude Code CLI 子 agent。它把两部分打包在一起：负责暴露执行工具的 MCP runtime，以及指导 Codex 何时拆分任务、何时并行、何时追加 review、如何整合结果的 orchestrator Skill。每个子 agent 都会返回结构化、可机读的结果：改了哪些文件、跑了哪些命令、验证证据、风险、下一步、token/成本证据。
+**Subagent Control Protocol（SCP）** 是一个可直接安装的 Codex 插件，用来让 Codex 作为总控编排多类 agent。它把两部分打包在一起：负责运行 Claude Code CLI 子 agent 的 MCP runtime，以及指导 Codex 何时拆分任务、何时并行、何时把非 Claude 任务路由到 `huoshan-worker`、`zhipu-worker`、`normal-worker` 等 Codex worker、如何追加 review 并整合结果的 orchestrator Skill。每个 worker 都会返回结构化、可机读的结果：改了哪些文件、跑了哪些命令、验证证据、风险、下一步、token/成本证据。
 
 ## Why It Exists
 
@@ -10,6 +10,7 @@ Codex is good at planning and integration, but a raw `claude -p` call is not a c
 
 - Codex decides task decomposition, ownership, and acceptance criteria.
 - Claude Code CLI executes the bounded local task as a subagent.
+- Named Codex workers execute non-`claude` branches through the Codex host when the Skill resolves aliases such as `huoshan` or `zhipu`.
 - The plugin's MCP runtime handles process lifecycle, concurrency, logging, structured output, and run archival.
 - Codex reads `run-summary.json` and the MCP `structuredContent`, then decides what to do next.
 
@@ -358,6 +359,101 @@ Concise controller pattern:
 4. **收集最终摘要**——用 `subagent_collect` 获取最终 summary；交叉比对 `filesChanged` 检查冲突，把修复定向给失败文件的唯一所有者。
 5. **跑两个只读评审**——实现完成后，派发一个“软件工程评审”子 agent 和一个“真实用户视角评审”子 agent。总控整合其结论后做最终的接受/搁置/发布决策。
 
+## Mixed Claude + Codex Worker Workflow
+
+SCP's default model is "Codex controller + Claude subagents." You can also mix
+**Claude workers** and **Codex workers** in the same plan. The two channels stay
+separate, and the controller is the only thing that ties them together.
+
+### Two channels, one controller
+
+- **Claude channel.** Claude subagents run through SCP's MCP runtime
+  (`subagent_run_task` / `subagent_run_many` / `subagent_start`). Their results
+  come back as the normal MCP envelope: `runSummary`, `results`, and
+  `measuredUsageSummary`. Nothing changes on this path when you add Codex workers.
+- **Codex worker channel.** Codex workers are spawned by the Codex *host* itself
+  via `multi_agent_v1.spawn_agent` — not by SCP's Node MCP runtime. SCP does not
+  spawn Codex workers directly. The controller waits on each worker with
+  `wait_agent` and reads its final message as the result.
+- **One controller, one `todoList`, one `dispatchLedger`.** The Codex controller
+  owns a single `todoList` (what to do, in what order) and a single
+  `dispatchLedger` (which todo went to which channel/worker, and its status).
+  Both channels draw from the same list; the ledger is how the controller
+  reconciles Claude results and Codex worker results side by side.
+
+### Natural prompts
+
+You can describe the split in plain language and let the controller route it:
+
+- **中文:**
+  > 任务一让 claude 并行做，任务二派三个 huoshan 和三个 zhipu 并行做。
+- **English:**
+  > Task one: have Claude do it in parallel. Task two: dispatch three huoshan and three zhipu workers in parallel.
+
+`huoshan` and `zhipu` are worker aliases the controller resolves before dispatch
+(see alias resolution below). The controller records each dispatch in the
+`dispatchLedger` so it can tell, later, which channel and worker a result came
+from.
+
+### Worker alias resolution & fallback
+
+When you name a Codex worker, the controller resolves it before spawning:
+
+- `huoshan` → `huoshan-worker`
+- `zhipu` → `zhipu-worker`
+- An exact `xxx-worker` name is used as-is.
+- A missing worker falls back to `normal-worker`.
+- If `normal-worker` is also missing, that branch is **blocked** — the controller
+  does not run it, and records the block in the ledger.
+- The controller **never** silently falls back to the Codex default agent. A
+  worker that cannot be resolved blocks rather than running as something else.
+
+### Reading results from both channels
+
+- **Claude results** arrive as the MCP envelope (`runSummary`, `results`,
+  `measuredUsageSummary`) — the same shape SCP already uses.
+- **Codex worker results** arrive as the `wait_agent` final message. The
+  controller prompts each Codex worker to return JSON compatible with the SCP
+  result contract (the same base fields Claude returns) plus worker identity:
+  `workerRuntime: "codex"`, `workerType` (for example `huoshan-worker`),
+  optional `workerAlias`, and optional `fallbackApplied`. If a worker's final
+  message is missing required fields, the controller may call `send_input`
+  **once** on that worker to request the missing fields, then accept whatever it
+  returns as final. The controller does not retry beyond that one follow-up.
+
+### Codex worker 429 auto-continue
+
+This recovery rule applies **only to Codex workers**; the Claude/SCP runner path
+is unchanged.
+
+- When a Codex worker's `wait_agent` final status or final message clearly
+  indicates a 429 / rate-limit condition, the controller sends `继续` to that
+  worker and retries collection.
+- The controller makes at most **3** auto-continue attempts per worker; after the
+  third it accepts the worker's last reply as final.
+- This is a **separate** mechanism from the one-time `send_input` follow-up used
+  to repair missing or invalid structured-result fields. The two are independent
+  and each keeps its own limit.
+- If the final status or final message is ambiguous, the controller does not
+  auto-continue.
+- Support is **final-message / final-status based only**. SCP does not promise
+  mid-run 429 interception; a 429 that does not surface in the `wait_agent` final
+  status or final message is not auto-continued.
+- The controller's final summary states whether auto-continue happened for a
+  worker and whether it recovered.
+
+### Compatibility
+
+This mixed model is additive:
+
+- The Claude runner path is unchanged — Claude subagents still go through SCP's
+  MCP runtime exactly as before.
+- SCP's Node MCP runtime does **not** spawn Codex workers. Codex workers are
+  host-spawned (`multi_agent_v1.spawn_agent`); SCP only handles the Claude
+  channel and the shared result contract.
+
+混合 Claude + Codex worker 的工作流是叠加式的：Claude 子 agent 仍走 SCP 的 MCP runtime，结果以 MCP 信封（`runSummary`/`results`/`measuredUsageSummary`）返回，路径不变；Codex worker 由 Codex 宿主通过 `multi_agent_v1.spawn_agent` 派生，SCP 的 Node MCP runtime 不直接派生 Codex worker。总控持有一份 `todoList` 和一份 `dispatchLedger`，两条通道都从同一份列表取活，账本用来对账两边结果。worker 别名解析：`huoshan`→`huoshan-worker`、`zhipu`→`zhipu-worker`，精确的 `xxx-worker` 原样使用；缺失 worker 回退到 `normal-worker`，若 `normal-worker` 也缺失则该分支阻塞，绝不回退到 Codex 默认 agent。Codex worker 结果以 `wait_agent` 终态消息返回，需提示其返回与 Claude 兼容的 JSON；缺字段时总控可用 `send_input` 再追问一次。Codex worker 遇到 429/限流时，总控向其发送 `继续` 并重试收集，每 worker 最多 3 次；若终态状态或消息不明确，则不会自动继续（仅基于 `wait_agent` 终态消息/状态判定，与补字段的 `send_input` 一次性追问相互独立，不承诺运行中拦截）；最终摘要需说明是否触发自动继续及是否恢复。
+
 ## Usage — Prompt Examples
 
 Most users should stop at the minimal prompts above. The examples below are optional advanced forms for cases where you want to hand the controller precise knobs.
@@ -397,7 +493,9 @@ Every tool returns a shared envelope: `{ ok: true, ...payload }` on success, or 
 
 ## Result Contract
 
-Every Claude subagent is asked to return JSON matching `schemas/agent-result.schema.json`:
+Every Claude subagent is asked to return JSON matching `schemas/agent-result.schema.json`.
+Codex worker final messages use the same base contract, with optional worker
+identity fields when available:
 
 - `status` — `completed` | `partial` | `blocked` | `failed`
 - `summary` — factual outcome
@@ -408,6 +506,10 @@ Every Claude subagent is asked to return JSON matching `schemas/agent-result.sch
 - `nextSteps` — concrete follow-up actions
 - `tokenUsageSummary` — **required, always.** A Claude-authored note on whether exact token usage was visible; never fabricate exact counts.
 - `metrics` — optional token/cost numbers when visible.
+- `workerRuntime` — optional, `claude` or `codex`; Codex workers should set `codex`.
+- `workerType` — optional resolved worker type, e.g. `huoshan-worker`, `zhipu-worker`, or `normal-worker`.
+- `workerAlias` — optional original alias or nickname, e.g. `huoshan`.
+- `fallbackApplied` — optional boolean, true when alias resolution used a fallback worker.
 
 The runner normalizes common variants (`files_changed`, `verifications`, `status: "passed"`) into the official shape, and repairs common Claude output envelopes such as fenced JSON blocks, prose-wrapped JSON, and `{ type: "result", result: "..." }`. The controller also records measured usage from the Claude CLI envelope as `usage` and `measuredUsageSummary` when available — prefer these over the subagent's self-report for actual token/cost.
 

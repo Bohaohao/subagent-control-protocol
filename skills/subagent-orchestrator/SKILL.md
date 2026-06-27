@@ -35,6 +35,7 @@ Whenever the user wants subagents to perform **construction / implementation / r
 7. **Review agents must not edit files.** Both review agents are instructed not to edit anything. Use supported tool controls only: for `claude` set `kind: "review"` and, when the MCP schema allows it, disallow edit tools such as `Edit`, `Write`, and `NotebookEdit`; do not invent an unsupported `permissionMode`. For Codex worker reviewers, instruct read-only behavior in the prompt.
 8. **Codex integrates.** Codex integrates implementation + both reviews, decides which review findings to accept, optionally performs targeted fixes (Codex itself, or a bounded implementer subagent with single-writer ownership), then summarizes the integrated result to the user. Codex remains the final integrator.
 9. **No unsupported dispatch knobs.** Do not add parameters that are not part of the current MCP tool schema (for `claude`) or the `multi_agent_v1.spawn_agent` schema (for Codex workers).
+10. **Timeout means continuation, not controller takeover.** When a delegated branch reaches a timeout terminal state (`timed_out` or equivalent), Codex must first collect whatever progress/results/events/artifacts are available from that worker, turn the unfinished portion into a continuation todo, and dispatch a fresh subagent to continue. Codex must not personally take over just because a subagent timed out. Personal takeover is allowed only when the user explicitly instructs Codex to do the work itself or explicitly stops further delegation.
 
 ## User prompt guidance (minimal expected input)
 
@@ -112,6 +113,13 @@ A terminal rate-limit recovery rule for Codex workers only:
 - **Implementation agents → non-overlapping file ownership.** Assign each implementer a disjoint set of files. Single-writer per file. Never let two workers — Claude or Codex worker — edit the same file concurrently.
 - **Codex stays the final integrator.** Subagents implement pieces; Codex merges, validates, and ships. Never let a subagent make the final merge/release decision.
 
+## Timeout recovery and re-dispatch
+
+- If a Claude or Codex worker branch times out, collect the best available progress snapshot first (`subagent_collect` / `subagent_status` / `subagent_watch` for Claude; `wait_agent` terminal output plus any prior structured result for Codex workers).
+- Update the todoList with a continuation todo that records what is already done, what remains, and what evidence/progress is being carried forward.
+- Dispatch a fresh subagent to continue from that recovered context.
+- Timeout alone is **not** a reason for Codex to personally take over.
+
 ## Result contract (require this from every worker)
 
 Every worker — Claude or Codex worker — must return JSON matching `schemas/agent-result.schema.json`, including:
@@ -137,6 +145,7 @@ After a run, summarize for the user:
 - max concurrency used
 - per-worker outputs and overall status, noting any `normalizationFailed`/partial results
 - whether Codex worker 429 auto-continue was used (attempt count) and whether recovery succeeded
+- whether any timeout recovery / continuation re-dispatch happened, and what prior progress was carried forward
 - verification performed and evidence
 - risks, with severity
 - token/cost evidence (citing `measuredUsageSummary`/`usage` for Claude; worker-reported for Codex workers)

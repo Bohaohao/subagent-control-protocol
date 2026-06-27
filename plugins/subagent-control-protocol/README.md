@@ -312,6 +312,28 @@ In plain language: Codex plans the work, runs independent implementers in parall
 
 收到这类精简 prompt 后，Codex 作为总控自行驱动完整流程：建立 `todoList` → 区分可并行任务 → 按 `todoList` 派发子 agent → 增加“软件工程评审”与“真实用户视角评审”子 agent → 整合评审结论 → 汇总报告并做最终决策。合并、发布、推送等决策始终由总控保留，不下放给子 agent。
 
+### Timeout recovery rule (hard)
+
+When a delegated branch times out, the controller must treat that as a
+continuation event, not as a silent handoff back to Codex for manual takeover.
+
+Required behavior:
+
+1. Collect the timed-out worker's best available progress first.
+   - Claude path: prefer `subagent_collect`, `subagent_status`, and
+     `subagent_watch`, plus run artifacts such as `result.json` and
+     `events.jsonl` when needed.
+   - Codex worker path: read the worker's terminal `wait_agent` result and any
+     already-produced structured output.
+2. Update the `todoList` with a continuation todo that records what is already
+   done, what remains, and what progress/evidence is being carried forward.
+3. Dispatch a fresh subagent to continue from that recovered context.
+4. Do not let Codex personally take over by default just because the prior
+   subagent timed out.
+
+Codex may personally take over only when the user explicitly says Codex should
+do the work itself, or explicitly stops further subagent delegation.
+
 ### Controller decision vs runtime execution layer
 
 Two distinct layers — keep them separate:
@@ -545,6 +567,11 @@ subagent is expected to keep writing subagent-owned events (especially
 observed for `timeoutMs`, the runner treats the task as stalled and stops it.
 Runtime-owned heartbeats (`source: "runtime"`) prove the process is alive, but
 they do **not** reset the subagent idle timeout by themselves.
+
+A timeout does **not** mean Codex should directly finish the work. The
+controller should first recover whatever progress the timed-out worker already
+produced, then re-dispatch a continuation subagent unless the user explicitly
+asks Codex to take over personally.
 
 Event entries are compact JSON objects. Common fields are:
 

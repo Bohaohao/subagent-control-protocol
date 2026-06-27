@@ -1,6 +1,6 @@
 {
   "name": "subagent-control-protocol",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "private": true,
   "type": "module",
   "description": "Codex plugin for orchestrating Claude Code subagents and host-spawned Codex workers from one controller workflow.",

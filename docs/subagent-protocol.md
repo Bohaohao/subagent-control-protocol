@@ -166,6 +166,30 @@ Before spawning a Codex worker, the controller resolves the requested name:
   integration, so `filesChanged`, `commandsRun`, `verification`, `risks`, and
   `tokenUsageSummary` are comparable across channels.
 
+### Timeout continuation rule (hard)
+
+Timeout recovery is controller behavior, and it applies to both channels:
+
+- When a delegated branch reaches a timeout terminal state (`timed_out` or an
+  equivalent timeout result), the controller must first collect the best
+  available progress and artifacts from that worker.
+- The controller must then update the shared `todoList` with a continuation todo
+  that records carried-forward progress, remaining work, and any missing
+  context.
+- The controller should dispatch a new subagent to continue from that recovered
+  state.
+- The controller must **not** personally take over the task by default just
+  because the subagent timed out.
+- Codex may personally take over only when the user explicitly instructs Codex
+  to do the work itself, or explicitly stops further subagent delegation.
+
+Channel-specific recovery sources:
+
+- Claude channel: prefer `subagent_collect`, `subagent_status`,
+  `subagent_watch`, `run-summary.json`, `result.json`, and `events.jsonl`.
+- Codex worker channel: prefer the terminal `wait_agent` result plus any
+  already-produced structured output from that worker.
+
 ### Compatibility (hard)
 
 - No change to the Claude runner path.
@@ -185,6 +209,9 @@ compact `phase_started`, `checkpoint`, `blocked`, `command_started`, and
 wall-clock deadline. The runner only times a task out when no subagent-owned
 event or heartbeat is observed for `timeoutMs`. Runtime-owned heartbeats show
 that the process is alive, but they do not reset the idle timeout on their own.
+
+A timeout terminal state should be treated as a recovery/continuation boundary,
+not as permission for the controller to silently absorb the remaining work.
 
 Events must stay small. They should include `type`, `timestamp`, `runId`,
 `taskId`, and one-line context fields such as `summary`, `reason`, `phase`,

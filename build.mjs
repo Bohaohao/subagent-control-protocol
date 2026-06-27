@@ -112,6 +112,7 @@ async function syncPluginBundle() {
   await copyPath(distDir, pluginDistDir)
   await fs.copyFile(path.join(rootDir, '.mcp.json'), path.join(pluginDir, '.mcp.json'))
   await fs.copyFile(path.join(rootDir, 'README.md'), path.join(pluginDir, 'README.md'))
+  await fs.copyFile(path.join(rootDir, 'README.zh-CN.md'), path.join(pluginDir, 'README.zh-CN.md'))
 }
 
 await fs.mkdir(distDir, { recursive: true })
